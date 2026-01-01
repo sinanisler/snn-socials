@@ -1,4 +1,4 @@
-<?php
+<?php 
 /**
  * Plugin Name: SNN Socials
  * Plugin URI: https://sinanisler.com
