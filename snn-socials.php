@@ -3,7 +3,7 @@
  * Plugin Name: SNN Socials
  * Plugin URI: https://sinanisler.com
  * Description: Publish images and videos to X (Twitter), LinkedIn, Instagram, and YouTube from your WordPress dashboard
- * Version: 1.1.2
+ * Version: 1.1.3
  * Author: Sinan Isler
  * Author URI: https://sinanisler.com
  * License: GPL v2 or later
@@ -67,17 +67,25 @@ class SNN_Socials {
             return;
         }
 
+        // Enqueue WordPress media uploader
         wp_enqueue_media();
-        wp_enqueue_style('snn-socials-admin', false);
+
+        // Register and enqueue styles
+        wp_register_style('snn-socials-admin', false);
+        wp_enqueue_style('snn-socials-admin');
         wp_add_inline_style('snn-socials-admin', $this->get_admin_css());
 
-        wp_enqueue_script('snn-socials-admin', false, array('jquery'), '1.0', true);
-        wp_add_inline_script('snn-socials-admin', $this->get_admin_js());
+        // Register and enqueue scripts with proper dependencies
+        wp_register_script('snn-socials-admin', false, array('jquery', 'media-upload', 'media-views'), '1.0.1', true);
+        wp_enqueue_script('snn-socials-admin');
 
+        // Localize script BEFORE adding inline script
         wp_localize_script('snn-socials-admin', 'snnSocials', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('snn_socials_nonce')
         ));
+
+        wp_add_inline_script('snn-socials-admin', $this->get_admin_js());
     }
     
     /**
@@ -125,7 +133,7 @@ class SNN_Socials {
                     <h2>Create Post</h2>
 
                     <div class="snn-form-group">
-                        <label for="snn-post-text">Post Text / Caption <span class="char-count"></span></label>
+                        <label for="snn-post-text">Post Text / Caption <span class="char-count"></span></label><br>
                         <textarea id="snn-post-text" rows="8" maxlength="5000" placeholder="Write your post text here...&#10;&#10;Share your thoughts, ideas, or updates with your audience across multiple platforms."></textarea>
                         <p class="description">Supports up to 5000 characters</p>
                     </div>
@@ -1074,6 +1082,11 @@ class SNN_Socials {
             max-width: 1400px;
         }
 
+        .snn-socials-wrap > h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
         .snn-publish-container {
             display: flex;
             gap: 30px;
@@ -1082,10 +1095,20 @@ class SNN_Socials {
 
         .snn-publish-form {
             flex: 1;
-            background: #fff;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid #e3e8ee;
+        }
+
+        .snn-publish-form h2 {
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 22px;
+            color: #1d2327;
+            border-bottom: 3px solid #2271b1;
+            padding-bottom: 12px;
         }
 
         .snn-sidebar {
@@ -1095,14 +1118,17 @@ class SNN_Socials {
         .snn-info-box {
             background: #fff;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
             margin-bottom: 20px;
+            border: 1px solid #e3e8ee;
         }
 
         .snn-info-box h3 {
             margin-top: 0;
             font-size: 16px;
+            color: #1d2327;
+            margin-bottom: 15px;
         }
 
         .snn-info-box ul {
@@ -1110,15 +1136,21 @@ class SNN_Socials {
             padding-left: 20px;
         }
 
+        .snn-info-box li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
         .snn-form-group {
-            margin-bottom: 25px;
+            margin-bottom: 28px;
         }
 
         .snn-form-group label {
             display: block;
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             font-size: 14px;
+            color: #1d2327;
         }
 
         .snn-form-group label .char-count {
@@ -1130,32 +1162,67 @@ class SNN_Socials {
 
         .snn-form-group textarea {
             width: 100%;
-            padding: 15px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
+            padding: 16px;
+            border: 2px solid #dfe4ea;
+            border-radius: 8px;
             font-size: 15px;
             line-height: 1.6;
             resize: vertical;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-            transition: border-color 0.3s;
+            transition: all 0.3s ease;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
 
         .snn-form-group textarea:focus {
             border-color: #2271b1;
             outline: none;
-            box-shadow: 0 0 0 1px #2271b1;
+            box-shadow: 0 0 0 3px rgba(34, 113, 177, 0.1), 0 1px 3px rgba(0,0,0,0.05);
         }
 
         .snn-form-group .description {
-            margin: 5px 0 0 0;
-            color: #666;
+            margin: 8px 0 0 0;
+            color: #646970;
             font-size: 12px;
         }
 
         .media-upload-area {
             display: flex;
-            gap: 10px;
+            gap: 12px;
             align-items: center;
+            flex-wrap: wrap;
+        }
+
+        #snn-select-media {
+            background: #2271b1;
+            color: #fff;
+            border-color: #2271b1;
+            font-weight: 500;
+            padding: 8px 20px;
+            height: auto;
+        }
+
+        #snn-select-media:hover {
+            background: #135e96;
+            border-color: #135e96;
+            color: #fff;
+        }
+
+        #snn-select-media:focus {
+            background: #135e96;
+            border-color: #135e96;
+            color: #fff;
+            box-shadow: 0 0 0 3px rgba(34, 113, 177, 0.2);
+        }
+
+        #snn-remove-media {
+            color: #d63638;
+            text-decoration: none;
+        }
+
+        #snn-remove-media:hover {
+            color: #d63638;
+            text-decoration: underline;
         }
 
         #snn-select-media .dashicons,
@@ -1169,25 +1236,31 @@ class SNN_Socials {
         .snn-platforms {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
+            gap: 12px;
         }
 
         .snn-platform-option {
             display: block;
-            padding: 15px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
+            padding: 16px;
+            border: 2px solid #dfe4ea;
+            border-radius: 10px;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.25s ease;
+            background: #fff;
+            position: relative;
         }
 
         .snn-platform-option:hover {
             border-color: #2271b1;
             background: #f0f6fc;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(34, 113, 177, 0.15);
         }
 
         .snn-platform-option input[type="checkbox"] {
-            margin-right: 8px;
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
         }
 
         .snn-platform-option input[type="checkbox"]:checked ~ .platform-label {
@@ -1195,62 +1268,130 @@ class SNN_Socials {
             font-weight: 600;
         }
 
+        .snn-platform-option:has(input[type="checkbox"]:checked) {
+            border-color: #2271b1;
+            background: #f0f6fc;
+            box-shadow: 0 2px 6px rgba(34, 113, 177, 0.2);
+        }
+
+        .platform-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
         .platform-icon {
-            display: inline-block;
-            width: 24px;
-            text-align: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
             font-weight: bold;
+            font-size: 16px;
+            border-radius: 6px;
+            background: #f0f0f1;
         }
 
         #snn-media-preview {
             margin-top: 15px;
-            padding: 15px;
-            background: #f9f9f9;
-            border-radius: 6px;
-            border: 1px solid #e0e0e0;
+            padding: 16px;
+            background: #fff;
+            border-radius: 8px;
+            border: 2px dashed #dfe4ea;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
 
         #snn-media-preview img,
         #snn-media-preview video {
             max-width: 100%;
+            max-height: 400px;
             height: auto;
-            border-radius: 4px;
+            border-radius: 6px;
             display: block;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
 
         #snn-media-preview p {
-            margin: 0;
+            margin: 6px 0;
             font-size: 13px;
-            color: #666;
+            color: #646970;
+        }
+
+        #snn-publish-btn {
+            width: 100%;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            height: auto;
+            background: linear-gradient(135deg, #2271b1 0%, #135e96 100%);
+            border: none;
+            box-shadow: 0 4px 12px rgba(34, 113, 177, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        #snn-publish-btn:hover {
+            background: linear-gradient(135deg, #135e96 0%, #0d4a73 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(34, 113, 177, 0.4);
+        }
+
+        #snn-publish-btn:active {
+            transform: translateY(0);
+        }
+
+        #snn-publish-btn:disabled {
+            background: #9ca3af;
+            box-shadow: none;
+            transform: none;
+            cursor: not-allowed;
+        }
+
+        .dashicons-spin {
+            animation: dashicons-spin 1s linear infinite;
+        }
+
+        @keyframes dashicons-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         /* Progress Bar */
         #snn-publish-progress {
             margin-top: 20px;
-            padding: 20px;
-            background: #f0f6fc;
-            border-radius: 6px;
-            border: 1px solid #c3d9ed;
+            padding: 24px;
+            background: linear-gradient(135deg, #e8f4fd 0%, #d6ebf7 100%);
+            border-radius: 10px;
+            border: 2px solid #b8ddf1;
+            box-shadow: 0 2px 8px rgba(34, 113, 177, 0.15);
         }
 
         .progress-bar-container {
             width: 100%;
-            height: 30px;
+            height: 32px;
             background: #fff;
-            border-radius: 15px;
+            border-radius: 16px;
             overflow: hidden;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
 
         .progress-bar {
             height: 100%;
-            background: linear-gradient(90deg, #2271b1, #135e96);
+            background: linear-gradient(90deg, #2271b1, #135e96, #0d4a73);
+            background-size: 200% 100%;
             width: 0%;
-            transition: width 0.3s ease;
+            transition: width 0.4s ease;
             position: relative;
             overflow: hidden;
+            animation: gradientShift 3s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
 
         .progress-bar::after {
@@ -1263,7 +1404,7 @@ class SNN_Socials {
             background: linear-gradient(
                 90deg,
                 rgba(255, 255, 255, 0) 0%,
-                rgba(255, 255, 255, 0.3) 50%,
+                rgba(255, 255, 255, 0.4) 50%,
                 rgba(255, 255, 255, 0) 100%
             );
             animation: shimmer 2s infinite;
@@ -1277,8 +1418,9 @@ class SNN_Socials {
         .progress-text {
             margin: 0;
             text-align: center;
-            font-weight: 500;
+            font-weight: 600;
             color: #135e96;
+            font-size: 14px;
         }
 
         #snn-publish-status {
@@ -1286,17 +1428,19 @@ class SNN_Socials {
         }
 
         .snn-status-item {
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 6px;
-            border-left: 4px solid #ddd;
-            animation: slideIn 0.3s ease;
+            padding: 16px 18px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            border-left: 5px solid #ddd;
+            animation: slideIn 0.4s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            font-size: 14px;
         }
 
         @keyframes slideIn {
             from {
                 opacity: 0;
-                transform: translateY(-10px);
+                transform: translateY(-15px);
             }
             to {
                 opacity: 1;
@@ -1305,31 +1449,36 @@ class SNN_Socials {
         }
 
         .snn-status-item.success {
-            background: #d4edda;
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
             border-left-color: #28a745;
             color: #155724;
         }
 
         .snn-status-item.error {
-            background: #f8d7da;
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c2c7 100%);
             border-left-color: #dc3545;
             color: #721c24;
             word-break: break-word;
         }
 
         .snn-status-item.loading {
-            background: #d1ecf1;
+            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
             border-left-color: #17a2b8;
             color: #0c5460;
         }
 
+        .snn-status-item strong {
+            font-size: 15px;
+        }
+
         .snn-status-item pre {
-            background: rgba(0,0,0,0.05);
-            padding: 10px;
-            border-radius: 4px;
+            background: rgba(0,0,0,0.08);
+            padding: 12px;
+            border-radius: 6px;
             overflow-x: auto;
-            margin: 10px 0 0 0;
-            font-size: 12px;
+            margin: 12px 0 0 0;
+            font-size: 11px;
+            line-height: 1.4;
         }
 
         /* API Settings Accordion */
@@ -1461,9 +1610,13 @@ class SNN_Socials {
     private function get_admin_js() {
         return '
         jQuery(document).ready(function($) {
+            console.log("SNN Socials script loaded");
+            console.log("wp.media available:", typeof wp.media !== "undefined");
+
             var mediaId = "";
             var mediaUrl = "";
             var mediaType = "";
+            var mediaFrame;
 
             // Character counter for textarea
             function updateCharCount() {
@@ -1476,21 +1629,42 @@ class SNN_Socials {
             $("#snn-post-text").on("input", updateCharCount);
             updateCharCount();
 
-            // Media uploader
+            // Media uploader - Fixed version
             $("#snn-select-media").on("click", function(e) {
                 e.preventDefault();
+                console.log("Select media button clicked");
 
-                var frame = wp.media({
-                    title: "Select Media",
-                    button: { text: "Use this media" },
+                // Check if media frame exists
+                if (typeof wp === "undefined" || typeof wp.media === "undefined") {
+                    alert("WordPress media library not loaded. Please refresh the page.");
+                    console.error("wp.media is not defined");
+                    return;
+                }
+
+                // If the media frame already exists, reopen it
+                if (mediaFrame) {
+                    mediaFrame.open();
+                    return;
+                }
+
+                // Create the media frame
+                mediaFrame = wp.media({
+                    title: "Select or Upload Media",
+                    button: {
+                        text: "Use this media"
+                    },
                     multiple: false,
                     library: {
                         type: ["image", "video"]
                     }
                 });
 
-                frame.on("select", function() {
-                    var attachment = frame.state().get("selection").first().toJSON();
+                // When an image is selected, run a callback
+                mediaFrame.on("select", function() {
+                    console.log("Media selected");
+                    var attachment = mediaFrame.state().get("selection").first().toJSON();
+                    console.log("Attachment:", attachment);
+
                     mediaId = attachment.id;
                     mediaUrl = attachment.url;
                     mediaType = attachment.type;
@@ -1503,22 +1677,30 @@ class SNN_Socials {
                     if (attachment.type === "image") {
                         preview = "<img src=\"" + attachment.url + "\" alt=\"Preview\">";
                     } else if (attachment.type === "video") {
-                        preview = "<video width=\"100%\" controls><source src=\"" + attachment.url + "\"></video>";
+                        preview = "<video width=\"100%\" controls><source src=\"" + attachment.url + "\" type=\"" + attachment.mime + "\"></video>";
                     }
-                    preview += "<p><strong>File:</strong> " + attachment.filename + "</p>";
-                    preview += "<p><strong>Type:</strong> " + attachment.mime + " | <strong>Size:</strong> " + (attachment.filesizeInBytes / 1024 / 1024).toFixed(2) + " MB</p>";
+                    preview += "<p><strong>File:</strong> " + (attachment.filename || "N/A") + "</p>";
 
-                    $("#snn-media-preview").html(preview).show();
+                    var fileSize = attachment.filesizeInBytes || attachment.filesize || 0;
+                    preview += "<p><strong>Type:</strong> " + (attachment.mime || "N/A") + " | <strong>Size:</strong> " + (fileSize / 1024 / 1024).toFixed(2) + " MB</p>";
+
+                    $("#snn-media-preview").html(preview).slideDown();
                     $("#snn-remove-media").show();
                 });
 
-                frame.open();
+                // Finally, open the modal
+                mediaFrame.open();
+                console.log("Media frame opened");
             });
 
             // Remove media
             $("#snn-remove-media").on("click", function(e) {
                 e.preventDefault();
-                $("#snn-media-preview").html("").hide();
+                console.log("Remove media clicked");
+
+                $("#snn-media-preview").slideUp(function() {
+                    $(this).html("");
+                });
                 $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
                 $("#snn-remove-media").hide();
                 mediaId = "";
@@ -1526,39 +1708,57 @@ class SNN_Socials {
                 mediaType = "";
             });
 
-            // Publish button with progress bar
+            // Publish button with enhanced progress tracking
             $("#snn-publish-btn").on("click", function() {
-                var text = $("#snn-post-text").val();
+                var text = $("#snn-post-text").val().trim();
                 var platforms = [];
 
                 $("input[name=\"platforms[]\"]:checked").each(function() {
                     platforms.push($(this).val());
                 });
 
+                // Get updated media values
+                mediaUrl = $("#snn-media-url").val();
+                mediaType = $("#snn-media-type").val();
+
+                // Validation
                 if (!text && !mediaUrl) {
-                    alert("Please add some text or media before publishing.");
+                    alert("⚠️ Please add some text or media before publishing.");
                     return;
                 }
 
                 if (platforms.length === 0) {
-                    alert("Please select at least one platform.");
+                    alert("⚠️ Please select at least one platform.");
                     return;
                 }
 
-                // Show progress bar
+                console.log("Publishing to:", platforms);
+                console.log("Media URL:", mediaUrl);
+
+                // Clear previous status and show progress
                 $("#snn-publish-status").html("");
-                $("#snn-publish-progress").show();
-                $("#snn-publish-btn").prop("disabled", true).text("Publishing...");
+                $("#snn-publish-progress").slideDown();
+                $("#snn-publish-btn").prop("disabled", true);
 
-                var totalPlatforms = platforms.length;
-                var completedPlatforms = 0;
+                // Update button text with icon
+                var originalButtonHtml = $("#snn-publish-btn").html();
+                $("#snn-publish-btn").html("<span class=\"dashicons dashicons-update dashicons-spin\"></span> Publishing...");
 
-                // Simulate progress
+                // Initialize progress
+                $(".progress-bar").css("width", "10%");
+                $(".progress-text").text("Initializing...");
+
+                var startTime = Date.now();
+
+                // Simulate smooth progress
                 var progressInterval = setInterval(function() {
-                    var progress = (completedPlatforms / totalPlatforms) * 100;
-                    $(".progress-bar").css("width", progress + "%");
-                    $(".progress-text").text("Publishing to " + platforms.join(", ") + "...");
-                }, 100);
+                    var currentWidth = parseFloat($(".progress-bar").css("width")) / parseFloat($(".progress-bar").parent().css("width")) * 100;
+                    if (currentWidth < 90) {
+                        $(".progress-bar").css("width", (currentWidth + 5) + "%");
+                    }
+                    var elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    $(".progress-text").text("Publishing to " + platforms.join(", ").toUpperCase() + "... (" + elapsed + "s)");
+                }, 500);
 
                 $.ajax({
                     url: snnSocials.ajaxUrl,
@@ -1572,24 +1772,34 @@ class SNN_Socials {
                         platforms: platforms
                     },
                     success: function(response) {
+                        console.log("Response:", response);
                         clearInterval(progressInterval);
+
+                        // Complete progress
                         $(".progress-bar").css("width", "100%");
-                        $(".progress-text").text("Complete!");
+                        $(".progress-text").html("✅ Complete!");
 
                         setTimeout(function() {
-                            $("#snn-publish-progress").fadeOut();
+                            $("#snn-publish-progress").slideUp();
 
                             var html = "";
                             var allSuccess = true;
+                            var successCount = 0;
+                            var failCount = 0;
 
                             $.each(response, function(platform, result) {
-                                if (!result.success) allSuccess = false;
+                                if (result.success) {
+                                    successCount++;
+                                } else {
+                                    failCount++;
+                                    allSuccess = false;
+                                }
 
                                 var status = result.success ? "success" : "error";
                                 var icon = result.success ? "✅" : "❌";
                                 html += "<div class=\"snn-status-item " + status + "\">";
-                                html += icon + " <strong>" + platform.toUpperCase() + ":</strong> ";
-                                html += "<div>" + result.message + "</div>";
+                                html += "<strong>" + icon + " " + platform.toUpperCase() + "</strong>";
+                                html += "<div style=\"margin-top: 6px;\">" + result.message + "</div>";
 
                                 // Show raw error for debugging if it exists
                                 if (!result.success && result.message) {
@@ -1604,14 +1814,25 @@ class SNN_Socials {
                                 html += "</div>";
                             });
 
-                            $("#snn-publish-status").html(html);
-                            $("#snn-publish-btn").prop("disabled", false).html("<span class=\"dashicons dashicons-megaphone\"></span> Publish Now");
+                            // Summary message
+                            if (allSuccess) {
+                                html = "<div class=\"snn-status-item success\"><strong>🎉 All posts published successfully!</strong><div style=\"margin-top: 6px;\">Published to " + successCount + " platform(s)</div></div>" + html;
+                            } else if (successCount > 0) {
+                                html = "<div class=\"snn-status-item loading\"><strong>⚠️ Partial success</strong><div style=\"margin-top: 6px;\">" + successCount + " succeeded, " + failCount + " failed</div></div>" + html;
+                            } else {
+                                html = "<div class=\"snn-status-item error\"><strong>❌ Publishing failed</strong><div style=\"margin-top: 6px;\">All " + failCount + " platform(s) failed</div></div>" + html;
+                            }
+
+                            $("#snn-publish-status").html(html).hide().slideDown();
+                            $("#snn-publish-btn").prop("disabled", false).html(originalButtonHtml);
 
                             // Clear form if all successful
                             if (allSuccess) {
                                 setTimeout(function() {
                                     $("#snn-post-text").val("");
-                                    $("#snn-media-preview").html("").hide();
+                                    $("#snn-media-preview").slideUp(function() {
+                                        $(this).html("");
+                                    });
                                     $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
                                     $("#snn-remove-media").hide();
                                     $("input[name=\"platforms[]\"]").prop("checked", false);
@@ -1620,22 +1841,20 @@ class SNN_Socials {
                                     mediaId = "";
                                     updateCharCount();
 
-                                    // Show success message
-                                    $("#snn-publish-status").prepend("<div class=\"snn-status-item success\">✨ Post published successfully! Form has been cleared for your next post.</div>");
-
-                                    // Clear status after 5 seconds
+                                    // Auto-hide status after 8 seconds
                                     setTimeout(function() {
-                                        $("#snn-publish-status").fadeOut(function() {
+                                        $("#snn-publish-status").slideUp(function() {
                                             $(this).html("").show();
                                         });
-                                    }, 5000);
+                                    }, 8000);
                                 }, 2000);
                             }
-                        }, 500);
+                        }, 800);
                     },
                     error: function(xhr, status, error) {
+                        console.error("AJAX Error:", xhr, status, error);
                         clearInterval(progressInterval);
-                        $("#snn-publish-progress").fadeOut();
+                        $("#snn-publish-progress").slideUp();
 
                         var errorMessage = "An error occurred. Please try again.";
                         if (xhr.responseText) {
@@ -1643,18 +1862,19 @@ class SNN_Socials {
                                 var errorData = JSON.parse(xhr.responseText);
                                 errorMessage = errorData.message || errorMessage;
                             } catch(e) {
-                                errorMessage = xhr.responseText;
+                                errorMessage = xhr.responseText.substring(0, 500);
                             }
                         }
 
                         $("#snn-publish-status").html(
                             "<div class=\"snn-status-item error\">" +
-                            "❌ <strong>AJAX Error:</strong><br>" +
-                            errorMessage +
+                            "<strong>❌ AJAX Error</strong>" +
+                            "<div style=\"margin-top: 8px;\">" + errorMessage + "</div>" +
                             "<pre>Status: " + status + "\\nError: " + error + "</pre>" +
                             "</div>"
-                        );
-                        $("#snn-publish-btn").prop("disabled", false).html("<span class=\"dashicons dashicons-megaphone\"></span> Publish Now");
+                        ).hide().slideDown();
+
+                        $("#snn-publish-btn").prop("disabled", false).html(originalButtonHtml);
                     }
                 });
             });
