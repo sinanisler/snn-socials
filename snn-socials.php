@@ -1,4 +1,4 @@
-<?php  
+<?php   
 /**
  * Plugin Name: SNN Socials
  * Plugin URI: https://sinanisler.com
@@ -42,32 +42,13 @@ class SNN_Socials {
      * Add admin menu
      */
     public function add_admin_menu() {
-        add_menu_page(
+        // Add to Settings menu
+        add_options_page(
             'SNN Socials',
             'SNN Socials',
-            'manage_options',
-            'snn-socials',
-            array($this, 'render_publish_page'),
-            'dashicons-share',
-            30
-        );
-        
-        add_submenu_page(
-            'snn-socials',
-            'Publish',
-            'Publish',
             'manage_options',
             'snn-socials',
             array($this, 'render_publish_page')
-        );
-        
-        add_submenu_page(
-            'snn-socials',
-            'Settings',
-            'Settings',
-            'manage_options',
-            'snn-socials-settings',
-            array($this, 'render_settings_page')
         );
     }
     
@@ -82,17 +63,17 @@ class SNN_Socials {
      * Enqueue admin scripts
      */
     public function enqueue_admin_scripts($hook) {
-        if (strpos($hook, 'snn-socials') === false) {
+        if ($hook !== 'settings_page_snn-socials') {
             return;
         }
-        
+
         wp_enqueue_media();
         wp_enqueue_style('snn-socials-admin', false);
         wp_add_inline_style('snn-socials-admin', $this->get_admin_css());
-        
+
         wp_enqueue_script('snn-socials-admin', false, array('jquery'), '1.0', true);
         wp_add_inline_script('snn-socials-admin', $this->get_admin_js());
-        
+
         wp_localize_script('snn-socials-admin', 'snnSocials', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('snn_socials_nonce')
@@ -103,28 +84,68 @@ class SNN_Socials {
      * Render publish page
      */
     public function render_publish_page() {
+        // Handle settings save
+        if (isset($_POST['snn_save_settings'])) {
+            check_admin_referer('snn_socials_settings_nonce');
+
+            $settings = array(
+                // X (Twitter) Settings
+                'x_api_key' => sanitize_text_field($_POST['x_api_key'] ?? ''),
+                'x_api_secret' => sanitize_text_field($_POST['x_api_secret'] ?? ''),
+                'x_access_token' => sanitize_text_field($_POST['x_access_token'] ?? ''),
+                'x_access_secret' => sanitize_text_field($_POST['x_access_secret'] ?? ''),
+
+                // LinkedIn Settings
+                'linkedin_client_id' => sanitize_text_field($_POST['linkedin_client_id'] ?? ''),
+                'linkedin_client_secret' => sanitize_text_field($_POST['linkedin_client_secret'] ?? ''),
+                'linkedin_access_token' => sanitize_text_field($_POST['linkedin_access_token'] ?? ''),
+                'linkedin_org_id' => sanitize_text_field($_POST['linkedin_org_id'] ?? ''),
+
+                // Instagram Settings
+                'instagram_access_token' => sanitize_text_field($_POST['instagram_access_token'] ?? ''),
+                'instagram_business_account_id' => sanitize_text_field($_POST['instagram_business_account_id'] ?? ''),
+
+                // YouTube Settings
+                'youtube_client_id' => sanitize_text_field($_POST['youtube_client_id'] ?? ''),
+                'youtube_client_secret' => sanitize_text_field($_POST['youtube_client_secret'] ?? ''),
+                'youtube_refresh_token' => sanitize_text_field($_POST['youtube_refresh_token'] ?? ''),
+            );
+
+            update_option($this->option_name, $settings);
+            echo '<div class="notice notice-success is-dismissible"><p>Settings saved successfully!</p></div>';
+        }
+
+        $settings = get_option($this->option_name, array());
         ?>
         <div class="wrap snn-socials-wrap">
             <h1>🚀 SNN Socials - Publish to Social Media</h1>
-            
+
             <div class="snn-publish-container">
                 <div class="snn-publish-form">
                     <h2>Create Post</h2>
-                    
+
                     <div class="snn-form-group">
-                        <label>Post Text / Caption</label>
-                        <textarea id="snn-post-text" rows="6" placeholder="Write your post text here..."></textarea>
+                        <label for="snn-post-text">Post Text / Caption <span class="char-count"></span></label>
+                        <textarea id="snn-post-text" rows="8" maxlength="5000" placeholder="Write your post text here...&#10;&#10;Share your thoughts, ideas, or updates with your audience across multiple platforms."></textarea>
+                        <p class="description">Supports up to 5000 characters</p>
                     </div>
-                    
+
                     <div class="snn-form-group">
                         <label>Media (Image or Video)</label>
-                        <button type="button" class="button" id="snn-select-media">Select Media</button>
+                        <div class="media-upload-area">
+                            <button type="button" class="button button-secondary" id="snn-select-media">
+                                <span class="dashicons dashicons-cloud-upload"></span> Select Media
+                            </button>
+                            <button type="button" class="button button-link-delete" id="snn-remove-media" style="display:none;">
+                                <span class="dashicons dashicons-no"></span> Remove Media
+                            </button>
+                        </div>
                         <div id="snn-media-preview"></div>
                         <input type="hidden" id="snn-media-id" value="">
                         <input type="hidden" id="snn-media-url" value="">
                         <input type="hidden" id="snn-media-type" value="">
                     </div>
-                    
+
                     <div class="snn-form-group">
                         <label>Publish To:</label>
                         <div class="snn-platforms">
@@ -135,7 +156,7 @@ class SNN_Socials {
                                     X (Twitter)
                                 </span>
                             </label>
-                            
+
                             <label class="snn-platform-option">
                                 <input type="checkbox" name="platforms[]" value="linkedin" id="platform-linkedin">
                                 <span class="platform-label">
@@ -143,7 +164,7 @@ class SNN_Socials {
                                     LinkedIn
                                 </span>
                             </label>
-                            
+
                             <label class="snn-platform-option">
                                 <input type="checkbox" name="platforms[]" value="instagram" id="platform-instagram">
                                 <span class="platform-label">
@@ -151,7 +172,7 @@ class SNN_Socials {
                                     Instagram
                                 </span>
                             </label>
-                            
+
                             <label class="snn-platform-option">
                                 <input type="checkbox" name="platforms[]" value="youtube" id="platform-youtube">
                                 <span class="platform-label">
@@ -161,16 +182,23 @@ class SNN_Socials {
                             </label>
                         </div>
                     </div>
-                    
+
                     <div class="snn-form-group">
                         <button type="button" class="button button-primary button-large" id="snn-publish-btn">
-                            Publish Now
+                            <span class="dashicons dashicons-megaphone"></span> Publish Now
                         </button>
                     </div>
-                    
+
+                    <div id="snn-publish-progress" style="display:none;">
+                        <div class="progress-bar-container">
+                            <div class="progress-bar"></div>
+                        </div>
+                        <p class="progress-text">Initializing...</p>
+                    </div>
+
                     <div id="snn-publish-status"></div>
                 </div>
-                
+
                 <div class="snn-sidebar">
                     <div class="snn-info-box">
                         <h3>📊 Quick Stats</h3>
@@ -183,7 +211,7 @@ class SNN_Socials {
                             <li>YouTube: 10,000 quota units/day</li>
                         </ul>
                     </div>
-                    
+
                     <div class="snn-info-box">
                         <h3>💡 Tips</h3>
                         <ul>
@@ -195,212 +223,181 @@ class SNN_Socials {
                     </div>
                 </div>
             </div>
-        </div>
-        <?php
-    }
-    
-    /**
-     * Render settings page
-     */
-    public function render_settings_page() {
-        if (isset($_POST['snn_save_settings'])) {
-            check_admin_referer('snn_socials_settings_nonce');
-            
-            $settings = array(
-                // X (Twitter) Settings
-                'x_api_key' => sanitize_text_field($_POST['x_api_key'] ?? ''),
-                'x_api_secret' => sanitize_text_field($_POST['x_api_secret'] ?? ''),
-                'x_access_token' => sanitize_text_field($_POST['x_access_token'] ?? ''),
-                'x_access_secret' => sanitize_text_field($_POST['x_access_secret'] ?? ''),
-                
-                // LinkedIn Settings
-                'linkedin_client_id' => sanitize_text_field($_POST['linkedin_client_id'] ?? ''),
-                'linkedin_client_secret' => sanitize_text_field($_POST['linkedin_client_secret'] ?? ''),
-                'linkedin_access_token' => sanitize_text_field($_POST['linkedin_access_token'] ?? ''),
-                'linkedin_org_id' => sanitize_text_field($_POST['linkedin_org_id'] ?? ''),
-                
-                // Instagram Settings
-                'instagram_access_token' => sanitize_text_field($_POST['instagram_access_token'] ?? ''),
-                'instagram_business_account_id' => sanitize_text_field($_POST['instagram_business_account_id'] ?? ''),
-                
-                // YouTube Settings
-                'youtube_client_id' => sanitize_text_field($_POST['youtube_client_id'] ?? ''),
-                'youtube_client_secret' => sanitize_text_field($_POST['youtube_client_secret'] ?? ''),
-                'youtube_refresh_token' => sanitize_text_field($_POST['youtube_refresh_token'] ?? ''),
-            );
-            
-            update_option($this->option_name, $settings);
-            echo '<div class="notice notice-success"><p>Settings saved successfully!</p></div>';
-        }
-        
-        $settings = get_option($this->option_name, array());
-        ?>
-        <div class="wrap snn-socials-wrap">
-            <h1>⚙️ SNN Socials Settings</h1>
-            
-            <form method="post" action="">
-                <?php wp_nonce_field('snn_socials_settings_nonce'); ?>
-                
-                <div class="snn-settings-container">
-                    
-                    <!-- X (Twitter) Settings -->
-                    <div class="snn-settings-section">
-                        <h2>𝕏 X (Twitter) API Settings</h2>
-                        <p class="description">
-                            Get your API credentials from <a href="https://developer.x.com/en/portal/dashboard" target="_blank">X Developer Portal</a>
-                        </p>
-                        
-                        <table class="form-table">
-                            <tr>
-                                <th><label>API Key (Consumer Key)</label></th>
-                                <td><input type="text" name="x_api_key" value="<?php echo esc_attr($settings['x_api_key'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>API Secret (Consumer Secret)</label></th>
-                                <td><input type="password" name="x_api_secret" value="<?php echo esc_attr($settings['x_api_secret'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>Access Token</label></th>
-                                <td><input type="text" name="x_access_token" value="<?php echo esc_attr($settings['x_access_token'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>Access Token Secret</label></th>
-                                <td><input type="password" name="x_access_secret" value="<?php echo esc_attr($settings['x_access_secret'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                        </table>
+
+            <!-- API Settings Section (Collapsible) -->
+            <div class="snn-api-settings-wrapper">
+                <details class="snn-settings-accordion">
+                    <summary>
+                        <span class="dashicons dashicons-admin-settings"></span>
+                        <strong>API Settings & Credentials</strong>
+                        <span class="description">Click to expand and configure your social media API credentials</span>
+                    </summary>
+
+                    <div class="snn-settings-content">
+                        <form method="post" action="">
+                            <?php wp_nonce_field('snn_socials_settings_nonce'); ?>
+
+                            <!-- X (Twitter) Settings -->
+                            <div class="snn-settings-section">
+                                <h2>𝕏 X (Twitter) API Settings</h2>
+                                <p class="description">
+                                    Get your API credentials from <a href="https://developer.x.com/en/portal/dashboard" target="_blank">X Developer Portal</a>
+                                </p>
+
+                                <table class="form-table">
+                                    <tr>
+                                        <th><label>API Key (Consumer Key)</label></th>
+                                        <td><input type="text" name="x_api_key" value="<?php echo esc_attr($settings['x_api_key'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>API Secret (Consumer Secret)</label></th>
+                                        <td><input type="password" name="x_api_secret" value="<?php echo esc_attr($settings['x_api_secret'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>Access Token</label></th>
+                                        <td><input type="text" name="x_access_token" value="<?php echo esc_attr($settings['x_access_token'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>Access Token Secret</label></th>
+                                        <td><input type="password" name="x_access_secret" value="<?php echo esc_attr($settings['x_access_secret'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <!-- LinkedIn Settings -->
+                            <div class="snn-settings-section">
+                                <h2>🔗 LinkedIn API Settings</h2>
+                                <p class="description">
+                                    Create an app at <a href="https://www.linkedin.com/developers/" target="_blank">LinkedIn Developers</a>
+                                </p>
+
+                                <table class="form-table">
+                                    <tr>
+                                        <th><label>Client ID</label></th>
+                                        <td><input type="text" name="linkedin_client_id" value="<?php echo esc_attr($settings['linkedin_client_id'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>Client Secret</label></th>
+                                        <td><input type="password" name="linkedin_client_secret" value="<?php echo esc_attr($settings['linkedin_client_secret'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>Access Token</label></th>
+                                        <td><input type="text" name="linkedin_access_token" value="<?php echo esc_attr($settings['linkedin_access_token'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>Organization ID (for company page)</label></th>
+                                        <td>
+                                            <input type="text" name="linkedin_org_id" value="<?php echo esc_attr($settings['linkedin_org_id'] ?? ''); ?>" class="regular-text">
+                                            <p class="description">Leave empty to post to personal profile</p>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <!-- Instagram Settings -->
+                            <div class="snn-settings-section">
+                                <h2>📷 Instagram API Settings</h2>
+                                <p class="description">
+                                    Get token from <a href="https://developers.facebook.com/" target="_blank">Facebook Developers</a> (Instagram Graph API)
+                                </p>
+
+                                <table class="form-table">
+                                    <tr>
+                                        <th><label>Access Token</label></th>
+                                        <td><input type="text" name="instagram_access_token" value="<?php echo esc_attr($settings['instagram_access_token'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>Instagram Business Account ID</label></th>
+                                        <td><input type="text" name="instagram_business_account_id" value="<?php echo esc_attr($settings['instagram_business_account_id'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <!-- YouTube Settings -->
+                            <div class="snn-settings-section">
+                                <h2>▶ YouTube API Settings</h2>
+                                <p class="description">
+                                    Create OAuth credentials at <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a>
+                                </p>
+
+                                <table class="form-table">
+                                    <tr>
+                                        <th><label>Client ID</label></th>
+                                        <td><input type="text" name="youtube_client_id" value="<?php echo esc_attr($settings['youtube_client_id'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>Client Secret</label></th>
+                                        <td><input type="password" name="youtube_client_secret" value="<?php echo esc_attr($settings['youtube_client_secret'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                    <tr>
+                                        <th><label>Refresh Token</label></th>
+                                        <td><input type="text" name="youtube_refresh_token" value="<?php echo esc_attr($settings['youtube_refresh_token'] ?? ''); ?>" class="regular-text"></td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <p class="submit">
+                                <input type="submit" name="snn_save_settings" class="button button-primary" value="Save API Settings">
+                            </p>
+                        </form>
+
+                        <!-- Help Section -->
+                        <div class="snn-help-section">
+                            <h3>📖 Setup Instructions</h3>
+                            <details>
+                                <summary><strong>X (Twitter) Setup</strong></summary>
+                                <ol>
+                                    <li>Go to <a href="https://developer.x.com/en/portal/dashboard" target="_blank">X Developer Portal</a></li>
+                                    <li>Create a new app or select existing</li>
+                                    <li>Set app permissions to "Read and Write"</li>
+                                    <li>Generate API Keys and Access Tokens</li>
+                                    <li>Copy all credentials to the fields above</li>
+                                </ol>
+                            </details>
+
+                            <details>
+                                <summary><strong>LinkedIn Setup</strong></summary>
+                                <ol>
+                                    <li>Go to <a href="https://www.linkedin.com/developers/" target="_blank">LinkedIn Developers</a></li>
+                                    <li>Create a new app</li>
+                                    <li>Add products: "Share on LinkedIn" and "Sign In with LinkedIn"</li>
+                                    <li>Under Auth tab, get your Client ID and Secret</li>
+                                    <li>Use OAuth 2.0 flow to get access token (can use Postman or similar)</li>
+                                    <li>For company page: Find your organization ID from company page URL</li>
+                                </ol>
+                            </details>
+
+                            <details>
+                                <summary><strong>Instagram Setup</strong></summary>
+                                <ol>
+                                    <li>Convert your Instagram to a Business account</li>
+                                    <li>Connect it to a Facebook Page</li>
+                                    <li>Go to <a href="https://developers.facebook.com/" target="_blank">Facebook Developers</a></li>
+                                    <li>Create an app and add Instagram Graph API product</li>
+                                    <li>Get a long-lived access token</li>
+                                    <li>Get your Instagram Business Account ID</li>
+                                </ol>
+                            </details>
+
+                            <details>
+                                <summary><strong>YouTube Setup</strong></summary>
+                                <ol>
+                                    <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                                    <li>Create a new project</li>
+                                    <li>Enable YouTube Data API v3</li>
+                                    <li>Create OAuth 2.0 credentials</li>
+                                    <li>Use OAuth playground to get refresh token</li>
+                                    <li>Scope needed: https://www.googleapis.com/auth/youtube.upload</li>
+                                </ol>
+                            </details>
+                        </div>
                     </div>
-                    
-                    <!-- LinkedIn Settings -->
-                    <div class="snn-settings-section">
-                        <h2>🔗 LinkedIn API Settings</h2>
-                        <p class="description">
-                            Create an app at <a href="https://www.linkedin.com/developers/" target="_blank">LinkedIn Developers</a>
-                        </p>
-                        
-                        <table class="form-table">
-                            <tr>
-                                <th><label>Client ID</label></th>
-                                <td><input type="text" name="linkedin_client_id" value="<?php echo esc_attr($settings['linkedin_client_id'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>Client Secret</label></th>
-                                <td><input type="password" name="linkedin_client_secret" value="<?php echo esc_attr($settings['linkedin_client_secret'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>Access Token</label></th>
-                                <td><input type="text" name="linkedin_access_token" value="<?php echo esc_attr($settings['linkedin_access_token'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>Organization ID (for company page)</label></th>
-                                <td>
-                                    <input type="text" name="linkedin_org_id" value="<?php echo esc_attr($settings['linkedin_org_id'] ?? ''); ?>" class="regular-text">
-                                    <p class="description">Leave empty to post to personal profile</p>
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                    
-                    <!-- Instagram Settings -->
-                    <div class="snn-settings-section">
-                        <h2>📷 Instagram API Settings</h2>
-                        <p class="description">
-                            Get token from <a href="https://developers.facebook.com/" target="_blank">Facebook Developers</a> (Instagram Graph API)
-                        </p>
-                        
-                        <table class="form-table">
-                            <tr>
-                                <th><label>Access Token</label></th>
-                                <td><input type="text" name="instagram_access_token" value="<?php echo esc_attr($settings['instagram_access_token'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>Instagram Business Account ID</label></th>
-                                <td><input type="text" name="instagram_business_account_id" value="<?php echo esc_attr($settings['instagram_business_account_id'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                        </table>
-                    </div>
-                    
-                    <!-- YouTube Settings -->
-                    <div class="snn-settings-section">
-                        <h2>▶ YouTube API Settings</h2>
-                        <p class="description">
-                            Create OAuth credentials at <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a>
-                        </p>
-                        
-                        <table class="form-table">
-                            <tr>
-                                <th><label>Client ID</label></th>
-                                <td><input type="text" name="youtube_client_id" value="<?php echo esc_attr($settings['youtube_client_id'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>Client Secret</label></th>
-                                <td><input type="password" name="youtube_client_secret" value="<?php echo esc_attr($settings['youtube_client_secret'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label>Refresh Token</label></th>
-                                <td><input type="text" name="youtube_refresh_token" value="<?php echo esc_attr($settings['youtube_refresh_token'] ?? ''); ?>" class="regular-text"></td>
-                            </tr>
-                        </table>
-                    </div>
-                    
-                </div>
-                
-                <p class="submit">
-                    <input type="submit" name="snn_save_settings" class="button button-primary" value="Save Settings">
-                </p>
-            </form>
-            
-            <div class="snn-help-section">
-                <h2>📖 Setup Instructions</h2>
-                <details>
-                    <summary><strong>X (Twitter) Setup</strong></summary>
-                    <ol>
-                        <li>Go to <a href="https://developer.x.com/en/portal/dashboard" target="_blank">X Developer Portal</a></li>
-                        <li>Create a new app or select existing</li>
-                        <li>Set app permissions to "Read and Write"</li>
-                        <li>Generate API Keys and Access Tokens</li>
-                        <li>Copy all credentials to the fields above</li>
-                    </ol>
-                </details>
-                
-                <details>
-                    <summary><strong>LinkedIn Setup</strong></summary>
-                    <ol>
-                        <li>Go to <a href="https://www.linkedin.com/developers/" target="_blank">LinkedIn Developers</a></li>
-                        <li>Create a new app</li>
-                        <li>Add products: "Share on LinkedIn" and "Sign In with LinkedIn"</li>
-                        <li>Under Auth tab, get your Client ID and Secret</li>
-                        <li>Use OAuth 2.0 flow to get access token (can use Postman or similar)</li>
-                        <li>For company page: Find your organization ID from company page URL</li>
-                    </ol>
-                </details>
-                
-                <details>
-                    <summary><strong>Instagram Setup</strong></summary>
-                    <ol>
-                        <li>Convert your Instagram to a Business account</li>
-                        <li>Connect it to a Facebook Page</li>
-                        <li>Go to <a href="https://developers.facebook.com/" target="_blank">Facebook Developers</a></li>
-                        <li>Create an app and add Instagram Graph API product</li>
-                        <li>Get a long-lived access token</li>
-                        <li>Get your Instagram Business Account ID</li>
-                    </ol>
-                </details>
-                
-                <details>
-                    <summary><strong>YouTube Setup</strong></summary>
-                    <ol>
-                        <li>Go to <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
-                        <li>Create a new project</li>
-                        <li>Enable YouTube Data API v3</li>
-                        <li>Create OAuth 2.0 credentials</li>
-                        <li>Use OAuth playground to get refresh token</li>
-                        <li>Scope needed: https://www.googleapis.com/auth/youtube.upload</li>
-                    </ol>
                 </details>
             </div>
         </div>
         <?php
     }
+    
     
     /**
      * Handle OAuth callback
@@ -1076,13 +1073,13 @@ class SNN_Socials {
         .snn-socials-wrap {
             max-width: 1400px;
         }
-        
+
         .snn-publish-container {
             display: flex;
             gap: 30px;
             margin-top: 20px;
         }
-        
+
         .snn-publish-form {
             flex: 1;
             background: #fff;
@@ -1090,11 +1087,11 @@ class SNN_Socials {
             border-radius: 8px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        
+
         .snn-sidebar {
             width: 300px;
         }
-        
+
         .snn-info-box {
             background: #fff;
             padding: 20px;
@@ -1102,43 +1099,79 @@ class SNN_Socials {
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             margin-bottom: 20px;
         }
-        
+
         .snn-info-box h3 {
             margin-top: 0;
             font-size: 16px;
         }
-        
+
         .snn-info-box ul {
             margin: 0;
             padding-left: 20px;
         }
-        
+
         .snn-form-group {
             margin-bottom: 25px;
         }
-        
+
         .snn-form-group label {
             display: block;
             font-weight: 600;
             margin-bottom: 8px;
             font-size: 14px;
         }
-        
+
+        .snn-form-group label .char-count {
+            float: right;
+            font-weight: normal;
+            color: #666;
+            font-size: 12px;
+        }
+
         .snn-form-group textarea {
             width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 15px;
+            line-height: 1.6;
             resize: vertical;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            transition: border-color 0.3s;
         }
-        
+
+        .snn-form-group textarea:focus {
+            border-color: #2271b1;
+            outline: none;
+            box-shadow: 0 0 0 1px #2271b1;
+        }
+
+        .snn-form-group .description {
+            margin: 5px 0 0 0;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .media-upload-area {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #snn-select-media .dashicons,
+        #snn-remove-media .dashicons,
+        #snn-publish-btn .dashicons {
+            line-height: inherit;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+
         .snn-platforms {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 15px;
         }
-        
+
         .snn-platform-option {
             display: block;
             padding: 15px;
@@ -1147,109 +1180,277 @@ class SNN_Socials {
             cursor: pointer;
             transition: all 0.3s;
         }
-        
+
         .snn-platform-option:hover {
             border-color: #2271b1;
             background: #f0f6fc;
         }
-        
+
         .snn-platform-option input[type="checkbox"] {
             margin-right: 8px;
         }
-        
+
         .snn-platform-option input[type="checkbox"]:checked ~ .platform-label {
             color: #2271b1;
             font-weight: 600;
         }
-        
+
         .platform-icon {
             display: inline-block;
             width: 24px;
             text-align: center;
             font-weight: bold;
         }
-        
+
         #snn-media-preview {
             margin-top: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
         }
-        
-        #snn-media-preview img {
-            max-width: 300px;
+
+        #snn-media-preview img,
+        #snn-media-preview video {
+            max-width: 100%;
             height: auto;
             border-radius: 4px;
-            border: 1px solid #ddd;
+            display: block;
+            margin-bottom: 10px;
         }
-        
+
+        #snn-media-preview p {
+            margin: 0;
+            font-size: 13px;
+            color: #666;
+        }
+
+        /* Progress Bar */
+        #snn-publish-progress {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f0f6fc;
+            border-radius: 6px;
+            border: 1px solid #c3d9ed;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 30px;
+            background: #fff;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #2271b1, #135e96);
+            width: 0%;
+            transition: width 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-bar::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(
+                90deg,
+                rgba(255, 255, 255, 0) 0%,
+                rgba(255, 255, 255, 0.3) 50%,
+                rgba(255, 255, 255, 0) 100%
+            );
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .progress-text {
+            margin: 0;
+            text-align: center;
+            font-weight: 500;
+            color: #135e96;
+        }
+
         #snn-publish-status {
             margin-top: 20px;
         }
-        
+
         .snn-status-item {
-            padding: 12px;
+            padding: 15px;
             margin-bottom: 10px;
-            border-radius: 4px;
+            border-radius: 6px;
             border-left: 4px solid #ddd;
+            animation: slideIn 0.3s ease;
         }
-        
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
         .snn-status-item.success {
             background: #d4edda;
             border-left-color: #28a745;
             color: #155724;
         }
-        
+
         .snn-status-item.error {
             background: #f8d7da;
             border-left-color: #dc3545;
             color: #721c24;
+            word-break: break-word;
         }
-        
+
         .snn-status-item.loading {
             background: #d1ecf1;
             border-left-color: #17a2b8;
             color: #0c5460;
         }
-        
-        .snn-settings-container {
-            max-width: 900px;
+
+        .snn-status-item pre {
+            background: rgba(0,0,0,0.05);
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 10px 0 0 0;
+            font-size: 12px;
         }
-        
-        .snn-settings-section {
+
+        /* API Settings Accordion */
+        .snn-api-settings-wrapper {
+            margin-top: 40px;
+        }
+
+        .snn-settings-accordion {
             background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .snn-settings-accordion summary {
+            padding: 20px 25px;
+            cursor: pointer;
+            background: #f9f9f9;
+            border-bottom: 1px solid #e0e0e0;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background 0.3s;
+        }
+
+        .snn-settings-accordion summary:hover {
+            background: #f0f0f0;
+        }
+
+        .snn-settings-accordion summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .snn-settings-accordion summary .dashicons {
+            color: #2271b1;
+        }
+
+        .snn-settings-accordion summary .description {
+            margin-left: auto;
+            font-size: 13px;
+            color: #666;
+            font-weight: normal;
+        }
+
+        .snn-settings-content {
+            padding: 25px;
+        }
+
+        .snn-settings-section {
+            background: #f9f9f9;
             padding: 25px;
             margin-bottom: 25px;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e0e0e0;
         }
-        
+
         .snn-settings-section h2 {
             margin-top: 0;
-            border-bottom: 2px solid #f0f0f0;
+            border-bottom: 2px solid #ddd;
             padding-bottom: 10px;
         }
-        
+
         .snn-help-section {
-            background: #fff;
-            padding: 25px;
+            background: #f0f6fc;
+            padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #c3d9ed;
             margin-top: 30px;
         }
-        
+
+        .snn-help-section h3 {
+            margin-top: 0;
+        }
+
         .snn-help-section details {
             margin-bottom: 15px;
             padding: 15px;
-            background: #f8f9fa;
+            background: #fff;
             border-radius: 4px;
+            border: 1px solid #ddd;
         }
-        
+
         .snn-help-section summary {
             cursor: pointer;
             font-weight: 600;
             color: #2271b1;
+            list-style: none;
         }
-        
+
+        .snn-help-section summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .snn-help-section summary::before {
+            content: "▶ ";
+            display: inline-block;
+            margin-right: 5px;
+            transition: transform 0.3s;
+        }
+
+        .snn-help-section details[open] summary::before {
+            transform: rotate(90deg);
+        }
+
         .snn-help-section ol {
             margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .snn-publish-container {
+                flex-direction: column;
+            }
+
+            .snn-sidebar {
+                width: 100%;
+            }
+
+            .snn-platforms {
+                grid-template-columns: 1fr;
+            }
         }
         ';
     }
@@ -1263,63 +1464,102 @@ class SNN_Socials {
             var mediaId = "";
             var mediaUrl = "";
             var mediaType = "";
-            
+
+            // Character counter for textarea
+            function updateCharCount() {
+                var text = $("#snn-post-text").val();
+                var count = text.length;
+                var maxLength = $("#snn-post-text").attr("maxlength");
+                $(".char-count").text(count + " / " + maxLength + " characters");
+            }
+
+            $("#snn-post-text").on("input", updateCharCount);
+            updateCharCount();
+
             // Media uploader
             $("#snn-select-media").on("click", function(e) {
                 e.preventDefault();
-                
+
                 var frame = wp.media({
                     title: "Select Media",
                     button: { text: "Use this media" },
-                    multiple: false
+                    multiple: false,
+                    library: {
+                        type: ["image", "video"]
+                    }
                 });
-                
+
                 frame.on("select", function() {
                     var attachment = frame.state().get("selection").first().toJSON();
                     mediaId = attachment.id;
                     mediaUrl = attachment.url;
                     mediaType = attachment.type;
-                    
+
                     $("#snn-media-id").val(mediaId);
                     $("#snn-media-url").val(mediaUrl);
                     $("#snn-media-type").val(mediaType);
-                    
+
                     var preview = "";
                     if (attachment.type === "image") {
                         preview = "<img src=\"" + attachment.url + "\" alt=\"Preview\">";
                     } else if (attachment.type === "video") {
-                        preview = "<video width=\"300\" controls><source src=\"" + attachment.url + "\"></video>";
+                        preview = "<video width=\"100%\" controls><source src=\"" + attachment.url + "\"></video>";
                     }
                     preview += "<p><strong>File:</strong> " + attachment.filename + "</p>";
-                    
-                    $("#snn-media-preview").html(preview);
+                    preview += "<p><strong>Type:</strong> " + attachment.mime + " | <strong>Size:</strong> " + (attachment.filesizeInBytes / 1024 / 1024).toFixed(2) + " MB</p>";
+
+                    $("#snn-media-preview").html(preview).show();
+                    $("#snn-remove-media").show();
                 });
-                
+
                 frame.open();
             });
-            
-            // Publish button
+
+            // Remove media
+            $("#snn-remove-media").on("click", function(e) {
+                e.preventDefault();
+                $("#snn-media-preview").html("").hide();
+                $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
+                $("#snn-remove-media").hide();
+                mediaId = "";
+                mediaUrl = "";
+                mediaType = "";
+            });
+
+            // Publish button with progress bar
             $("#snn-publish-btn").on("click", function() {
                 var text = $("#snn-post-text").val();
                 var platforms = [];
-                
+
                 $("input[name=\"platforms[]\"]:checked").each(function() {
                     platforms.push($(this).val());
                 });
-                
+
                 if (!text && !mediaUrl) {
                     alert("Please add some text or media before publishing.");
                     return;
                 }
-                
+
                 if (platforms.length === 0) {
                     alert("Please select at least one platform.");
                     return;
                 }
-                
-                $("#snn-publish-status").html("<div class=\"snn-status-item loading\">⏳ Publishing...</div>");
-                $("#snn-publish-btn").prop("disabled", true);
-                
+
+                // Show progress bar
+                $("#snn-publish-status").html("");
+                $("#snn-publish-progress").show();
+                $("#snn-publish-btn").prop("disabled", true).text("Publishing...");
+
+                var totalPlatforms = platforms.length;
+                var completedPlatforms = 0;
+
+                // Simulate progress
+                var progressInterval = setInterval(function() {
+                    var progress = (completedPlatforms / totalPlatforms) * 100;
+                    $(".progress-bar").css("width", progress + "%");
+                    $(".progress-text").text("Publishing to " + platforms.join(", ") + "...");
+                }, 100);
+
                 $.ajax({
                     url: snnSocials.ajaxUrl,
                     type: "POST",
@@ -1332,38 +1572,89 @@ class SNN_Socials {
                         platforms: platforms
                     },
                     success: function(response) {
-                        var html = "";
-                        
-                        $.each(response, function(platform, result) {
-                            var status = result.success ? "success" : "error";
-                            var icon = result.success ? "✅" : "❌";
-                            html += "<div class=\"snn-status-item " + status + "\">";
-                            html += icon + " <strong>" + platform.toUpperCase() + ":</strong> " + result.message;
-                            html += "</div>";
-                        });
-                        
-                        $("#snn-publish-status").html(html);
-                        $("#snn-publish-btn").prop("disabled", false);
-                        
-                        // Clear form if all successful
-                        var allSuccess = true;
-                        $.each(response, function(platform, result) {
-                            if (!result.success) allSuccess = false;
-                        });
-                        
-                        if (allSuccess) {
-                            setTimeout(function() {
-                                $("#snn-post-text").val("");
-                                $("#snn-media-preview").html("");
-                                $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
-                                mediaUrl = "";
-                                mediaType = "";
-                            }, 3000);
-                        }
+                        clearInterval(progressInterval);
+                        $(".progress-bar").css("width", "100%");
+                        $(".progress-text").text("Complete!");
+
+                        setTimeout(function() {
+                            $("#snn-publish-progress").fadeOut();
+
+                            var html = "";
+                            var allSuccess = true;
+
+                            $.each(response, function(platform, result) {
+                                if (!result.success) allSuccess = false;
+
+                                var status = result.success ? "success" : "error";
+                                var icon = result.success ? "✅" : "❌";
+                                html += "<div class=\"snn-status-item " + status + "\">";
+                                html += icon + " <strong>" + platform.toUpperCase() + ":</strong> ";
+                                html += "<div>" + result.message + "</div>";
+
+                                // Show raw error for debugging if it exists
+                                if (!result.success && result.message) {
+                                    try {
+                                        var errorObj = JSON.parse(result.message);
+                                        html += "<pre>" + JSON.stringify(errorObj, null, 2) + "</pre>";
+                                    } catch(e) {
+                                        // Message is not JSON, just display it
+                                    }
+                                }
+
+                                html += "</div>";
+                            });
+
+                            $("#snn-publish-status").html(html);
+                            $("#snn-publish-btn").prop("disabled", false).html("<span class=\"dashicons dashicons-megaphone\"></span> Publish Now");
+
+                            // Clear form if all successful
+                            if (allSuccess) {
+                                setTimeout(function() {
+                                    $("#snn-post-text").val("");
+                                    $("#snn-media-preview").html("").hide();
+                                    $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
+                                    $("#snn-remove-media").hide();
+                                    $("input[name=\"platforms[]\"]").prop("checked", false);
+                                    mediaUrl = "";
+                                    mediaType = "";
+                                    mediaId = "";
+                                    updateCharCount();
+
+                                    // Show success message
+                                    $("#snn-publish-status").prepend("<div class=\"snn-status-item success\">✨ Post published successfully! Form has been cleared for your next post.</div>");
+
+                                    // Clear status after 5 seconds
+                                    setTimeout(function() {
+                                        $("#snn-publish-status").fadeOut(function() {
+                                            $(this).html("").show();
+                                        });
+                                    }, 5000);
+                                }, 2000);
+                            }
+                        }, 500);
                     },
-                    error: function() {
-                        $("#snn-publish-status").html("<div class=\"snn-status-item error\">❌ An error occurred. Please try again.</div>");
-                        $("#snn-publish-btn").prop("disabled", false);
+                    error: function(xhr, status, error) {
+                        clearInterval(progressInterval);
+                        $("#snn-publish-progress").fadeOut();
+
+                        var errorMessage = "An error occurred. Please try again.";
+                        if (xhr.responseText) {
+                            try {
+                                var errorData = JSON.parse(xhr.responseText);
+                                errorMessage = errorData.message || errorMessage;
+                            } catch(e) {
+                                errorMessage = xhr.responseText;
+                            }
+                        }
+
+                        $("#snn-publish-status").html(
+                            "<div class=\"snn-status-item error\">" +
+                            "❌ <strong>AJAX Error:</strong><br>" +
+                            errorMessage +
+                            "<pre>Status: " + status + "\\nError: " + error + "</pre>" +
+                            "</div>"
+                        );
+                        $("#snn-publish-btn").prop("disabled", false).html("<span class=\"dashicons dashicons-megaphone\"></span> Publish Now");
                     }
                 });
             });
