@@ -4,7 +4,7 @@
  * Plugin URI: https://sinanisler.com
  * Description: Publish images and videos to X (Twitter), LinkedIn, Instagram, and YouTube from your WordPress dashboard
  * Version: 1.1.3
- * Author: Sinan Isler
+ * Author: sinanisler
  * Author URI: https://sinanisler.com
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
