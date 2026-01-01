@@ -142,7 +142,7 @@ class SNN_Socials {
                         <label>Media (Image or Video)</label>
                         <div class="media-upload-area">
                             <button type="button" class="button button-secondary" id="snn-select-media">
-                                <span class="dashicons dashicons-cloud-upload"></span> Select Media
+                                  Select Media
                             </button>
                             <button type="button" class="button button-link-delete" id="snn-remove-media" style="display:none;">
                                 <span class="dashicons dashicons-no"></span> Remove Media
@@ -193,7 +193,7 @@ class SNN_Socials {
 
                     <div class="snn-form-group">
                         <button type="button" class="button button-primary button-large" id="snn-publish-btn">
-                            <span class="dashicons dashicons-megaphone"></span> Publish Now
+                              Publish Now
                         </button>
                     </div>
 
