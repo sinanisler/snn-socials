@@ -1,0 +1,85 @@
+name: Plugin Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: '0'
+
+      - name: Get current version
+        id: get_version
+        run: |
+          version=$(grep -oP 'Version:\s*\K[0-9.]+' snn-socials.php)
+          echo "Current version: $version"
+          echo "version=$version" >> $GITHUB_ENV
+
+      - name: Bump version if release
+        if: contains(github.event.head_commit.message, 'release')
+        run: |
+          current_version=$(grep -oP 'Version:\s*\K[0-9.]+' snn-socials.php)
+          next_version=$(awk -F. '{print $1 "." $2 "." ($3+1)}' <<< "$current_version")
+          sed -i "s/Version: $current_version/Version: $next_version/" snn-socials.php
+          echo "version=$next_version" >> $GITHUB_ENV
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add snn-socials.php
+          git commit -m "Bump version to $next_version"
+          git push
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ env.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ env.version }} already exists"
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tag v${{ env.version }} does not exist"
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create plugin ZIP
+        if: steps.check_tag.outputs.tag_exists == 'false'
+        run: |
+          mkdir -p snn-socials
+          rsync -av --progress . snn-socials/ \
+            --exclude .git \
+            --exclude .github \
+            --exclude node_modules \
+            --exclude .DS_Store \
+            --exclude .gitignore
+          zip -r snn-socials.zip snn-socials/
+          ls -lh snn-socials.zip
+
+      - name: Create Release
+        if: steps.check_tag.outputs.tag_exists == 'false'
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "snn-socials.zip"
+          tag: "v${{ env.version }}"
+          name: "SNN Socials v${{ env.version }}"
+          body: |
+            ## SNN Socials v${{ env.version }}
+
+            ### Changes
+            ${{ github.event.head_commit.message }}
+
+            ### Installation
+            1. Download `snn-socials.zip`
+            2. Go to WordPress Admin > Plugins > Add New > Upload Plugin
+            3. Upload the ZIP file and activate
+
+            ### Update from GitHub
+            This plugin supports automatic updates from GitHub. Just install once and get updates automatically in your WordPress admin!
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: false

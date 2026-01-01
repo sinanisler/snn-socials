@@ -1,0 +1,33 @@
+# WordPress
+.DS_Store
+Thumbs.db
+
+# Node modules (if you add any build process later)
+node_modules/
+npm-debug.log
+
+# Editor files
+*.sublime-project
+*.sublime-workspace
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Plugin specific
+*.zip
