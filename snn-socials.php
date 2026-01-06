@@ -543,32 +543,34 @@ class SNN_Socials {
                 $debug_log[] = 'Media uploaded OK. ID: ' . $media_id;
             }
 
-            // Create tweet
+            // Create tweet using v1.1 API (more compatible with OAuth 1.0a)
             $debug_log[] = '--- CREATING TWEET ---';
-            $tweet_data = array('text' => $text);
+
+            // v1.1 uses 'status' instead of 'text'
+            $tweet_params = array('status' => $text);
             if ($media_id) {
-                $tweet_data['media'] = array('media_ids' => array($media_id));
+                $tweet_params['media_ids'] = $media_id;
                 $debug_log[] = 'Tweet with media. ID: ' . $media_id;
             } else {
                 $debug_log[] = 'Tweet text only';
             }
-            $debug_log[] = 'Tweet payload: ' . json_encode($tweet_data);
+            $debug_log[] = 'Tweet params: ' . json_encode($tweet_params);
 
-            $response = $this->make_x_request(
+            $response = $this->make_x_request_v1(
                 'POST',
-                'https://api.x.com/2/tweets',
-                $tweet_data,
+                'https://api.x.com/1.1/statuses/update.json',
+                $tweet_params,
                 $settings,
                 $debug_log
             );
 
             $debug_log[] = 'API Response: ' . json_encode($response);
 
-            if (isset($response['data']['id'])) {
-                $debug_log[] = 'SUCCESS! Tweet ID: ' . $response['data']['id'];
+            if (isset($response['id_str'])) {
+                $debug_log[] = 'SUCCESS! Tweet ID: ' . $response['id_str'];
                 return array(
                     'success' => true,
-                    'message' => 'Published to X successfully! Debug: ' . implode(' | ', $debug_log)
+                    'message' => 'Published to X successfully! Tweet ID: ' . $response['id_str'] . ' | Debug: ' . implode(' | ', $debug_log)
                 );
             }
 
@@ -673,6 +675,87 @@ class SNN_Socials {
         return $media_id;
     }
     
+    /**
+     * Make X API v1.1 request (with URL-encoded params - for statuses/update endpoint)
+     */
+    private function make_x_request_v1($method, $url, $params, $settings, &$debug_log = array()) {
+        $debug_log[] = '[X API v1.1 REQUEST START]';
+        $debug_log[] = 'Method: ' . $method;
+        $debug_log[] = 'URL: ' . $url;
+        $debug_log[] = 'Params: ' . json_encode($params);
+
+        $oauth_params = $this->generate_x_oauth_params($method, $url, $params, $settings);
+        $auth_header = 'OAuth ' . $this->build_oauth_header($oauth_params);
+
+        $debug_log[] = 'OAuth nonce: ' . $oauth_params['oauth_nonce'];
+        $debug_log[] = 'OAuth timestamp: ' . $oauth_params['oauth_timestamp'];
+        $debug_log[] = 'OAuth signature (first 20): ' . substr($oauth_params['oauth_signature'], 0, 20) . '...';
+        $debug_log[] = 'Full Auth header (first 100): ' . substr($auth_header, 0, 100) . '...';
+
+        // For v1.1, parameters go in the URL query string or form body
+        $full_url = $url;
+        $request_body = '';
+
+        if ($method === 'POST') {
+            // POST params go in body as form-encoded
+            $request_body = http_build_query($params);
+            $debug_log[] = 'POST body: ' . $request_body;
+
+            $args = array(
+                'method' => $method,
+                'headers' => array(
+                    'Authorization' => $auth_header,
+                    'Content-Type' => 'application/x-www-form-urlencoded'
+                ),
+                'body' => $request_body,
+                'timeout' => 30
+            );
+        } else {
+            // GET params go in URL
+            if (!empty($params)) {
+                $full_url .= '?' . http_build_query($params);
+            }
+            $debug_log[] = 'Full URL: ' . $full_url;
+
+            $args = array(
+                'method' => $method,
+                'headers' => array(
+                    'Authorization' => $auth_header
+                ),
+                'timeout' => 30
+            );
+        }
+
+        $debug_log[] = 'Sending v1.1 request...';
+        $response = wp_remote_request($full_url, $args);
+
+        if (is_wp_error($response)) {
+            $debug_log[] = 'ERROR wp_remote_request: ' . $response->get_error_message();
+            error_log('SNN Socials X API v1.1: ' . implode(' | ', $debug_log));
+            throw new Exception($response->get_error_message());
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        $response_headers = wp_remote_retrieve_headers($response);
+
+        $debug_log[] = 'HTTP Status: ' . $status_code;
+        $debug_log[] = 'Response body: ' . $response_body;
+        $debug_log[] = 'Response headers: ' . print_r($response_headers, true);
+
+        $decoded = json_decode($response_body, true);
+
+        if ($status_code >= 400) {
+            $debug_log[] = 'ERROR HTTP ' . $status_code;
+            error_log('SNN Socials X API v1.1 ERROR: ' . implode(' | ', $debug_log));
+        } else {
+            $debug_log[] = 'Request completed with status ' . $status_code;
+            error_log('SNN Socials X API v1.1: ' . implode(' | ', $debug_log));
+        }
+
+        return $decoded;
+    }
+
     /**
      * Make X API request (with detailed debug logging)
      */
