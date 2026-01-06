@@ -730,6 +730,18 @@ class SNN_Socials {
 
         if ($status_code >= 400) {
             $debug_log[] = 'ERROR HTTP ' . $status_code;
+
+            // Check for permission issues
+            if (isset($response_headers['x-access-level'])) {
+                $access_level = $response_headers['x-access-level'];
+                $debug_log[] = 'X-Access-Level: ' . $access_level;
+
+                if ($access_level === 'read' && $method === 'POST') {
+                    $debug_log[] = 'PERMISSION ERROR: Your X app only has READ permissions. To post tweets, you need READ and WRITE permissions.';
+                    $debug_log[] = 'FIX: Go to https://developer.x.com/en/portal/dashboard → Your App → Settings → User authentication settings → Change permissions to "Read and Write" → Regenerate your Access Token and Secret → Update plugin settings';
+                }
+            }
+
             error_log('SNN Socials X API v2 ERROR: ' . implode(' | ', $debug_log));
         } else {
             $debug_log[] = 'Request completed with status ' . $status_code;
