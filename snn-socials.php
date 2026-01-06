@@ -3,7 +3,7 @@
  * Plugin Name: SNN Socials
  * Plugin URI: https://sinanisler.com
  * Description: Publish images and videos to X (Twitter), LinkedIn, Instagram, and YouTube from your WordPress dashboard
- * Version: 1.1.4
+ * Version: 1.1.5
  * Author: sinanisler
  * Author URI: https://sinanisler.com
  * License: GPL v2 or later
@@ -76,7 +76,7 @@ class SNN_Socials {
         wp_add_inline_style('snn-socials-admin', $this->get_admin_css());
 
         // Register and enqueue scripts with proper dependencies
-        wp_register_script('snn-socials-admin', false, array('jquery', 'media-upload', 'media-views'), '1.0.1', true);
+        wp_register_script('snn-socials-admin', false, array('jquery', 'media-upload', 'media-views'), '2.0.0', true);
         wp_enqueue_script('snn-socials-admin');
 
         // Localize script BEFORE adding inline script
@@ -142,7 +142,7 @@ class SNN_Socials {
                         <label>Media (Image or Video)</label>
                         <div class="media-upload-area">
                             <button type="button" class="button button-secondary" id="snn-select-media">
-                                  Select Media
+                                📎 Select Media
                             </button>
                             <button type="button" class="button button-link-delete" id="snn-remove-media" style="display:none;">
                                 <span class="dashicons dashicons-no"></span> Remove Media
@@ -193,15 +193,20 @@ class SNN_Socials {
 
                     <div class="snn-form-group">
                         <button type="button" class="button button-primary button-large" id="snn-publish-btn">
-                              Publish Now
+                            🚀 Publish Now
                         </button>
                     </div>
 
-                    <div id="snn-publish-progress" style="display:none;">
-                        <div class="progress-bar-container">
-                            <div class="progress-bar"></div>
+                    <!-- NEW: Sequential Process Queue Container -->
+                    <div id="snn-process-queue" class="snn-process-queue" style="display:none;">
+                        <div class="queue-header">
+                            <h3>📋 Publishing Queue</h3>
+                            <div class="queue-eta-badge">
+                                <span class="eta-label">ETA:</span>
+                                <span class="eta-time">Calculating...</span>
+                            </div>
                         </div>
-                        <p class="progress-text">Initializing...</p>
+                        <div class="queue-items"></div>
                     </div>
 
                     <div id="snn-publish-status"></div>
@@ -422,28 +427,24 @@ class SNN_Socials {
         check_ajax_referer('snn_socials_nonce', 'nonce');
         
         $platform = sanitize_text_field($_POST['platform'] ?? '');
-        $result = array('success' => false, 'message' => 'Platform not supported');
         
-        switch ($platform) {
-            case 'x':
-                $result = $this->test_x_connection();
-                break;
-            case 'linkedin':
-                $result = $this->test_linkedin_connection();
-                break;
-            case 'instagram':
-                $result = $this->test_instagram_connection();
-                break;
-            case 'youtube':
-                $result = $this->test_youtube_connection();
-                break;
+        // Use dynamic method dispatching
+        $method_name = 'test_' . $platform . '_connection';
+        
+        if (method_exists($this, $method_name)) {
+            $result = $this->$method_name();
+        } else {
+            $result = array(
+                'success' => false, 
+                'message' => 'Platform "' . $platform . '" is not supported or method does not exist'
+            );
         }
         
         wp_send_json($result);
     }
     
     /**
-     * AJAX: Publish post
+     * AJAX: Publish post (UPGRADED - Single platform per request for sequential processing)
      */
     public function ajax_publish_post() {
         check_ajax_referer('snn_socials_nonce', 'nonce');
@@ -451,32 +452,39 @@ class SNN_Socials {
         $text = sanitize_textarea_field($_POST['text'] ?? '');
         $media_url = esc_url_raw($_POST['media_url'] ?? '');
         $media_type = sanitize_text_field($_POST['media_type'] ?? '');
-        $platforms = array_map('sanitize_text_field', $_POST['platforms'] ?? array());
+        $platform = sanitize_text_field($_POST['platform'] ?? '');
         
-        $results = array();
-        
-        foreach ($platforms as $platform) {
-            switch ($platform) {
-                case 'x':
-                    $results['x'] = $this->publish_to_x($text, $media_url, $media_type);
-                    break;
-                case 'linkedin':
-                    $results['linkedin'] = $this->publish_to_linkedin($text, $media_url, $media_type);
-                    break;
-                case 'instagram':
-                    $results['instagram'] = $this->publish_to_instagram($text, $media_url, $media_type);
-                    break;
-                case 'youtube':
-                    $results['youtube'] = $this->publish_to_youtube($text, $media_url, $media_type);
-                    break;
-            }
+        // Validate platform
+        if (empty($platform)) {
+            wp_send_json(array(
+                'success' => false,
+                'message' => 'No platform specified'
+            ));
+            return;
         }
         
-        wp_send_json($results);
+        // Dynamic method dispatching - construct method name
+        $method_name = 'publish_to_' . $platform;
+        
+        // Graceful method checking
+        if (!method_exists($this, $method_name)) {
+            wp_send_json(array(
+                'success' => false,
+                'message' => 'Platform "' . $platform . '" is not supported. Please enable it or contact support.'
+            ));
+            return;
+        }
+        
+        // Call the appropriate publishing method dynamically
+        $result = $this->$method_name($text, $media_url, $media_type);
+        
+        // Standardized response format is already enforced by each method
+        wp_send_json($result);
     }
     
     /**
      * Publish to X (Twitter)
+     * @return array Standardized response: ['success' => bool, 'message' => string]
      */
     private function publish_to_x($text, $media_url, $media_type) {
         $settings = get_option($this->option_name, array());
@@ -512,8 +520,7 @@ class SNN_Socials {
             if (isset($response['data']['id'])) {
                 return array(
                     'success' => true,
-                    'message' => 'Published to X successfully',
-                    'id' => $response['data']['id']
+                    'message' => 'Published to X successfully'
                 );
             }
             
@@ -654,6 +661,7 @@ class SNN_Socials {
     
     /**
      * Publish to LinkedIn
+     * @return array Standardized response: ['success' => bool, 'message' => string]
      */
     private function publish_to_linkedin($text, $media_url, $media_type) {
         $settings = get_option($this->option_name, array());
@@ -819,6 +827,7 @@ class SNN_Socials {
     
     /**
      * Publish to Instagram
+     * @return array Standardized response: ['success' => bool, 'message' => string]
      */
     private function publish_to_instagram($text, $media_url, $media_type) {
         $settings = get_option($this->option_name, array());
@@ -879,8 +888,7 @@ class SNN_Socials {
             if (isset($publish_result['id'])) {
                 return array(
                     'success' => true,
-                    'message' => 'Published to Instagram successfully',
-                    'id' => $publish_result['id']
+                    'message' => 'Published to Instagram successfully'
                 );
             }
             
@@ -896,6 +904,7 @@ class SNN_Socials {
     
     /**
      * Publish to YouTube
+     * @return array Standardized response: ['success' => bool, 'message' => string]
      */
     private function publish_to_youtube($text, $media_url, $media_type) {
         $settings = get_option($this->option_name, array());
@@ -964,8 +973,7 @@ class SNN_Socials {
             if (isset($result['id'])) {
                 return array(
                     'success' => true,
-                    'message' => 'Published to YouTube successfully',
-                    'id' => $result['id']
+                    'message' => 'Published to YouTube successfully'
                 );
             }
             
@@ -1074,7 +1082,7 @@ class SNN_Socials {
     }
     
     /**
-     * Get admin CSS
+     * Get admin CSS (UPGRADED with Queue UI styles)
      */
     private function get_admin_css() {
         return '
@@ -1180,6 +1188,12 @@ class SNN_Socials {
             box-shadow: 0 0 0 3px rgba(34, 113, 177, 0.1), 0 1px 3px rgba(0,0,0,0.05);
         }
 
+        .snn-form-group textarea:disabled,
+        .snn-form-group input[type="checkbox"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .snn-form-group .description {
             margin: 8px 0 0 0;
             color: #646970;
@@ -1202,7 +1216,7 @@ class SNN_Socials {
             height: auto;
         }
 
-        #snn-select-media:hover {
+        #snn-select-media:hover:not(:disabled) {
             background: #135e96;
             border-color: #135e96;
             color: #fff;
@@ -1213,6 +1227,11 @@ class SNN_Socials {
             border-color: #135e96;
             color: #fff;
             box-shadow: 0 0 0 3px rgba(34, 113, 177, 0.2);
+        }
+
+        #snn-select-media:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         #snn-remove-media {
@@ -1331,7 +1350,7 @@ class SNN_Socials {
             transition: all 0.3s ease;
         }
 
-        #snn-publish-btn:hover {
+        #snn-publish-btn:hover:not(:disabled) {
             background: linear-gradient(135deg, #135e96 0%, #0d4a73 100%);
             transform: translateY(-2px);
             box-shadow: 0 6px 16px rgba(34, 113, 177, 0.4);
@@ -1357,7 +1376,212 @@ class SNN_Socials {
             100% { transform: rotate(360deg); }
         }
 
-        /* Progress Bar */
+        /* NEW: Sequential Process Queue Styles */
+        .snn-process-queue {
+            margin-top: 25px;
+            padding: 25px;
+            background: linear-gradient(135deg, #f0f6fc 0%, #e8f4fd 100%);
+            border-radius: 12px;
+            border: 2px solid #b8ddf1;
+            box-shadow: 0 4px 10px rgba(34, 113, 177, 0.15);
+            animation: slideInDown 0.4s ease;
+        }
+
+        @keyframes slideInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .queue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #b8ddf1;
+        }
+
+        .queue-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #135e96;
+            font-weight: 700;
+        }
+
+        .queue-eta-badge {
+            background: linear-gradient(135deg, #2271b1 0%, #135e96 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(34, 113, 177, 0.3);
+        }
+
+        .queue-eta-badge .eta-label {
+            opacity: 0.9;
+            margin-right: 5px;
+        }
+
+        .queue-eta-badge .eta-time {
+            font-weight: 700;
+        }
+
+        .queue-items {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .queue-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 16px 18px;
+            background: white;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s ease;
+            animation: itemFadeIn 0.3s ease;
+        }
+
+        @keyframes itemFadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .queue-item.pending {
+            opacity: 0.7;
+            border-color: #dfe4ea;
+        }
+
+        .queue-item.publishing {
+            border-color: #2271b1;
+            background: linear-gradient(135deg, #f0f6fc 0%, #ffffff 100%);
+            box-shadow: 0 4px 12px rgba(34, 113, 177, 0.2);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 4px 12px rgba(34, 113, 177, 0.2);
+            }
+            50% {
+                transform: scale(1.02);
+                box-shadow: 0 6px 16px rgba(34, 113, 177, 0.3);
+            }
+        }
+
+        .queue-item.success {
+            border-color: #28a745;
+            background: linear-gradient(135deg, #d4edda 0%, #ffffff 100%);
+        }
+
+        .queue-item.error {
+            border-color: #dc3545;
+            background: linear-gradient(135deg, #f8d7da 0%, #ffffff 100%);
+        }
+
+        .queue-item-icon {
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: #f0f0f1;
+            flex-shrink: 0;
+        }
+
+        .queue-item.publishing .queue-item-icon {
+            animation: spin 1.5s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .queue-item-content {
+            flex: 1;
+        }
+
+        .queue-item-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1d2327;
+            margin-bottom: 4px;
+        }
+
+        .queue-item-status {
+            font-size: 13px;
+            color: #646970;
+        }
+
+        .queue-item.success .queue-item-status {
+            color: #155724;
+            font-weight: 500;
+        }
+
+        .queue-item.error .queue-item-status {
+            color: #721c24;
+            font-weight: 500;
+            word-break: break-word;
+        }
+
+        .queue-item-spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e0e0e0;
+            border-top-color: #2271b1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            flex-shrink: 0;
+        }
+
+        .queue-item-check {
+            width: 32px;
+            height: 32px;
+            background: #28a745;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .queue-item-cross {
+            width: 32px;
+            height: 32px;
+            background: #dc3545;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        /* Legacy progress (hidden when using queue) */
         #snn-publish-progress {
             margin-top: 20px;
             padding: 24px;
@@ -1605,279 +1829,384 @@ class SNN_Socials {
     }
     
     /**
-     * Get admin JavaScript
+     * Get admin JavaScript (UPGRADED with Queue Manager)
      */
     private function get_admin_js() {
         return '
         jQuery(document).ready(function($) {
-            console.log("SNN Socials script loaded");
-            console.log("wp.media available:", typeof wp.media !== "undefined");
+            console.log("SNN Socials v2.0 - Queue Manager Loaded");
 
-            var mediaId = "";
-            var mediaUrl = "";
-            var mediaType = "";
-            var mediaFrame;
-
-            // Character counter for textarea
-            function updateCharCount() {
-                var text = $("#snn-post-text").val();
-                var count = text.length;
-                var maxLength = $("#snn-post-text").attr("maxlength");
-                $(".char-count").text(count + " / " + maxLength + " characters");
-            }
-
-            $("#snn-post-text").on("input", updateCharCount);
-            updateCharCount();
-
-            // Media uploader - Fixed version
-            $("#snn-select-media").on("click", function(e) {
-                e.preventDefault();
-                console.log("Select media button clicked");
-
-                // Check if media frame exists
-                if (typeof wp === "undefined" || typeof wp.media === "undefined") {
-                    alert("WordPress media library not loaded. Please refresh the page.");
-                    console.error("wp.media is not defined");
-                    return;
-                }
-
-                // If the media frame already exists, reopen it
-                if (mediaFrame) {
-                    mediaFrame.open();
-                    return;
-                }
-
-                // Create the media frame
-                mediaFrame = wp.media({
-                    title: "Select or Upload Media",
-                    button: {
-                        text: "Use this media"
-                    },
-                    multiple: false,
-                    library: {
-                        type: ["image", "video"]
-                    }
-                });
-
-                // When an image is selected, run a callback
-                mediaFrame.on("select", function() {
-                    console.log("Media selected");
-                    var attachment = mediaFrame.state().get("selection").first().toJSON();
-                    console.log("Attachment:", attachment);
-
-                    mediaId = attachment.id;
-                    mediaUrl = attachment.url;
-                    mediaType = attachment.type;
-
-                    $("#snn-media-id").val(mediaId);
-                    $("#snn-media-url").val(mediaUrl);
-                    $("#snn-media-type").val(mediaType);
-
-                    var preview = "";
-                    if (attachment.type === "image") {
-                        preview = "<img src=\"" + attachment.url + "\" alt=\"Preview\">";
-                    } else if (attachment.type === "video") {
-                        preview = "<video width=\"100%\" controls><source src=\"" + attachment.url + "\" type=\"" + attachment.mime + "\"></video>";
-                    }
-                    preview += "<p><strong>File:</strong> " + (attachment.filename || "N/A") + "</p>";
-
-                    var fileSize = attachment.filesizeInBytes || attachment.filesize || 0;
-                    preview += "<p><strong>Type:</strong> " + (attachment.mime || "N/A") + " | <strong>Size:</strong> " + (fileSize / 1024 / 1024).toFixed(2) + " MB</p>";
-
-                    $("#snn-media-preview").html(preview).slideDown();
-                    $("#snn-remove-media").show();
-                });
-
-                // Finally, open the modal
-                mediaFrame.open();
-                console.log("Media frame opened");
-            });
-
-            // Remove media
-            $("#snn-remove-media").on("click", function(e) {
-                e.preventDefault();
-                console.log("Remove media clicked");
-
-                $("#snn-media-preview").slideUp(function() {
-                    $(this).html("");
-                });
-                $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
-                $("#snn-remove-media").hide();
-                mediaId = "";
-                mediaUrl = "";
-                mediaType = "";
-            });
-
-            // Publish button with enhanced progress tracking
-            $("#snn-publish-btn").on("click", function() {
-                var text = $("#snn-post-text").val().trim();
-                var platforms = [];
-
-                $("input[name=\"platforms[]\"]:checked").each(function() {
-                    platforms.push($(this).val());
-                });
-
-                // Get updated media values
-                mediaUrl = $("#snn-media-url").val();
-                mediaType = $("#snn-media-type").val();
-
-                // Validation
-                if (!text && !mediaUrl) {
-                    alert("⚠️ Please add some text or media before publishing.");
-                    return;
-                }
-
-                if (platforms.length === 0) {
-                    alert("⚠️ Please select at least one platform.");
-                    return;
-                }
-
-                console.log("Publishing to:", platforms);
-                console.log("Media URL:", mediaUrl);
-
-                // Clear previous status and show progress
-                $("#snn-publish-status").html("");
-                $("#snn-publish-progress").slideDown();
-                $("#snn-publish-btn").prop("disabled", true);
-
-                // Update button text with icon
-                var originalButtonHtml = $("#snn-publish-btn").html();
-                $("#snn-publish-btn").html("<span class=\"dashicons dashicons-update dashicons-spin\"></span> Publishing...");
-
-                // Initialize progress
-                $(".progress-bar").css("width", "10%");
-                $(".progress-text").text("Initializing...");
-
-                var startTime = Date.now();
-
-                // Simulate smooth progress
-                var progressInterval = setInterval(function() {
-                    var currentWidth = parseFloat($(".progress-bar").css("width")) / parseFloat($(".progress-bar").parent().css("width")) * 100;
-                    if (currentWidth < 90) {
-                        $(".progress-bar").css("width", (currentWidth + 5) + "%");
-                    }
-                    var elapsed = Math.floor((Date.now() - startTime) / 1000);
-                    $(".progress-text").text("Publishing to " + platforms.join(", ").toUpperCase() + "... (" + elapsed + "s)");
-                }, 500);
-
-                $.ajax({
-                    url: snnSocials.ajaxUrl,
-                    type: "POST",
-                    data: {
-                        action: "snn_publish_post",
-                        nonce: snnSocials.nonce,
-                        text: text,
-                        media_url: mediaUrl,
-                        media_type: mediaType,
-                        platforms: platforms
-                    },
-                    success: function(response) {
-                        console.log("Response:", response);
-                        clearInterval(progressInterval);
-
-                        // Complete progress
-                        $(".progress-bar").css("width", "100%");
-                        $(".progress-text").html("✅ Complete!");
-
-                        setTimeout(function() {
-                            $("#snn-publish-progress").slideUp();
-
-                            var html = "";
-                            var allSuccess = true;
-                            var successCount = 0;
-                            var failCount = 0;
-
-                            $.each(response, function(platform, result) {
-                                if (result.success) {
-                                    successCount++;
-                                } else {
-                                    failCount++;
-                                    allSuccess = false;
-                                }
-
-                                var status = result.success ? "success" : "error";
-                                var icon = result.success ? "✅" : "❌";
-                                html += "<div class=\"snn-status-item " + status + "\">";
-                                html += "<strong>" + icon + " " + platform.toUpperCase() + "</strong>";
-                                html += "<div style=\"margin-top: 6px;\">" + result.message + "</div>";
-
-                                // Show raw error for debugging if it exists
-                                if (!result.success && result.message) {
-                                    try {
-                                        var errorObj = JSON.parse(result.message);
-                                        html += "<pre>" + JSON.stringify(errorObj, null, 2) + "</pre>";
-                                    } catch(e) {
-                                        // Message is not JSON, just display it
-                                    }
-                                }
-
-                                html += "</div>";
-                            });
-
-                            // Summary message
-                            if (allSuccess) {
-                                html = "<div class=\"snn-status-item success\"><strong>🎉 All posts published successfully!</strong><div style=\"margin-top: 6px;\">Published to " + successCount + " platform(s)</div></div>" + html;
-                            } else if (successCount > 0) {
-                                html = "<div class=\"snn-status-item loading\"><strong>⚠️ Partial success</strong><div style=\"margin-top: 6px;\">" + successCount + " succeeded, " + failCount + " failed</div></div>" + html;
-                            } else {
-                                html = "<div class=\"snn-status-item error\"><strong>❌ Publishing failed</strong><div style=\"margin-top: 6px;\">All " + failCount + " platform(s) failed</div></div>" + html;
-                            }
-
-                            $("#snn-publish-status").html(html).hide().slideDown();
-                            $("#snn-publish-btn").prop("disabled", false).html(originalButtonHtml);
-
-                            // Clear form if all successful
-                            if (allSuccess) {
-                                setTimeout(function() {
-                                    $("#snn-post-text").val("");
-                                    $("#snn-media-preview").slideUp(function() {
-                                        $(this).html("");
-                                    });
-                                    $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
-                                    $("#snn-remove-media").hide();
-                                    $("input[name=\"platforms[]\"]").prop("checked", false);
-                                    mediaUrl = "";
-                                    mediaType = "";
-                                    mediaId = "";
-                                    updateCharCount();
-
-                                    // Auto-hide status after 8 seconds
-                                    setTimeout(function() {
-                                        $("#snn-publish-status").slideUp(function() {
-                                            $(this).html("").show();
-                                        });
-                                    }, 8000);
-                                }, 2000);
-                            }
-                        }, 800);
-                    },
-                    error: function(xhr, status, error) {
-                        console.error("AJAX Error:", xhr, status, error);
-                        clearInterval(progressInterval);
-                        $("#snn-publish-progress").slideUp();
-
-                        var errorMessage = "An error occurred. Please try again.";
-                        if (xhr.responseText) {
-                            try {
-                                var errorData = JSON.parse(xhr.responseText);
-                                errorMessage = errorData.message || errorMessage;
-                            } catch(e) {
-                                errorMessage = xhr.responseText.substring(0, 500);
-                            }
+            // =================================================================
+            // QUEUE MANAGER OBJECT
+            // =================================================================
+            var QueueManager = {
+                queue: [],
+                currentIndex: 0,
+                startTime: null,
+                completedCount: 0,
+                isRunning: false,
+                
+                // Initialize queue with selected platforms
+                init: function(platforms, postData) {
+                    this.queue = platforms.map(function(platform) {
+                        var name = platform.charAt(0).toUpperCase() + platform.slice(1);
+                        var icon = QueueManager.getPlatformIcon(platform);
+                        
+                        return {
+                            id: platform,
+                            name: name,
+                            icon: icon,
+                            status: "pending",
+                            message: "Waiting..."
+                        };
+                    });
+                    
+                    this.currentIndex = 0;
+                    this.startTime = Date.now();
+                    this.completedCount = 0;
+                    this.isRunning = true;
+                    this.postData = postData;
+                    
+                    this.renderQueue();
+                    this.updateETA();
+                },
+                
+                // Get platform icon
+                getPlatformIcon: function(platform) {
+                    var icons = {
+                        "x": "𝕏",
+                        "linkedin": "in",
+                        "instagram": "📷",
+                        "youtube": "▶"
+                    };
+                    return icons[platform] || "•";
+                },
+                
+                // Render queue UI
+                renderQueue: function() {
+                    var $queue = $("#snn-process-queue");
+                    var $items = $queue.find(".queue-items");
+                    
+                    $items.empty();
+                    
+                    $.each(this.queue, function(index, item) {
+                        var statusClass = item.status;
+                        var statusIcon = "";
+                        
+                        if (item.status === "publishing") {
+                            statusIcon = \'<div class="queue-item-spinner"></div>\';
+                        } else if (item.status === "success") {
+                            statusIcon = \'<div class="queue-item-check">✓</div>\';
+                        } else if (item.status === "error") {
+                            statusIcon = \'<div class="queue-item-cross">✕</div>\';
                         }
-
-                        $("#snn-publish-status").html(
-                            "<div class=\"snn-status-item error\">" +
-                            "<strong>❌ AJAX Error</strong>" +
-                            "<div style=\"margin-top: 8px;\">" + errorMessage + "</div>" +
-                            "<pre>Status: " + status + "\\nError: " + error + "</pre>" +
-                            "</div>"
-                        ).hide().slideDown();
-
-                        $("#snn-publish-btn").prop("disabled", false).html(originalButtonHtml);
+                        
+                        var html = \'<div id="queue-item-\' + item.id + \'" class="queue-item \' + statusClass + \'">\';
+                        html += \'<div class="queue-item-icon">\' + item.icon + \'</div>\';
+                        html += \'<div class="queue-item-content">\';
+                        html += \'<div class="queue-item-name">\' + item.name + \'</div>\';
+                        html += \'<div class="queue-item-status">\' + item.message + \'</div>\';
+                        html += \'</div>\';
+                        html += statusIcon;
+                        html += \'</div>\';
+                        
+                        $items.append(html);
+                    });
+                    
+                    $queue.slideDown();
+                },
+                
+                // Update ETA display
+                updateETA: function() {
+                    if (this.completedCount === 0 || !this.isRunning) {
+                        $(".eta-time").text("Calculating...");
+                        return;
                     }
-                });
-            });
+                    
+                    var elapsed = (Date.now() - this.startTime) / 1000; // seconds
+                    var avgTimePerItem = elapsed / this.completedCount;
+                    var remaining = this.queue.length - this.completedCount;
+                    var eta = Math.ceil(avgTimePerItem * remaining);
+                    
+                    if (eta > 60) {
+                        $(".eta-time").text(Math.ceil(eta / 60) + " min");
+                    } else {
+                        $(".eta-time").text(eta + " sec");
+                    }
+                },
+                
+                // Update individual queue item
+                updateItem: function(platform, status, message) {
+                    var item = this.queue.find(function(i) { return i.id === platform; });
+                    if (item) {
+                        item.status = status;
+                        item.message = message;
+                        
+                        var $item = $("#queue-item-" + platform);
+                        $item.removeClass("pending publishing success error").addClass(status);
+                        $item.find(".queue-item-status").text(message);
+                        
+                        // Update icon
+                        $item.find(".queue-item-spinner, .queue-item-check, .queue-item-cross").remove();
+                        
+                        if (status === "publishing") {
+                            $item.append(\'<div class="queue-item-spinner"></div>\');
+                        } else if (status === "success") {
+                            $item.append(\'<div class="queue-item-check">✓</div>\');
+                        } else if (status === "error") {
+                            $item.append(\'<div class="queue-item-cross">✕</div>\');
+                        }
+                    }
+                },
+                
+                // Process next item in queue
+                processNext: function() {
+                    if (this.currentIndex >= this.queue.length) {
+                        this.finish();
+                        return;
+                    }
+                    
+                    var currentItem = this.queue[this.currentIndex];
+                    this.updateItem(currentItem.id, "publishing", "Publishing...");
+                    
+                    // Make AJAX call for single platform
+                    $.ajax({
+                        url: snnSocials.ajaxUrl,
+                        type: "POST",
+                        data: {
+                            action: "snn_publish_post",
+                            nonce: snnSocials.nonce,
+                            platform: currentItem.id,
+                            text: this.postData.text,
+                            media_url: this.postData.mediaUrl,
+                            media_type: this.postData.mediaType
+                        },
+                        success: function(response) {
+                            console.log(currentItem.name + " response:", response);
+                            
+                            if (response.success) {
+                                QueueManager.updateItem(currentItem.id, "success", "✓ Published successfully!");
+                            } else {
+                                QueueManager.updateItem(currentItem.id, "error", response.message || "Failed to publish");
+                            }
+                            
+                            QueueManager.completedCount++;
+                            QueueManager.updateETA();
+                            QueueManager.currentIndex++;
+                            
+                            // Continue to next (even on failure)
+                            setTimeout(function() {
+                                QueueManager.processNext();
+                            }, 500);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error(currentItem.name + " error:", error);
+                            
+                            QueueManager.updateItem(currentItem.id, "error", "Connection error: " + error);
+                            QueueManager.completedCount++;
+                            QueueManager.updateETA();
+                            QueueManager.currentIndex++;
+                            
+                            // Continue to next even on error
+                            setTimeout(function() {
+                                QueueManager.processNext();
+                            }, 500);
+                        }
+                    });
+                },
+                
+                // Finish processing
+                finish: function() {
+                    this.isRunning = false;
+                    
+                    var successCount = this.queue.filter(function(i) { return i.status === "success"; }).length;
+                    var errorCount = this.queue.filter(function(i) { return i.status === "error"; }).length;
+                    
+                    // Update ETA badge to summary
+                    $(".queue-eta-badge").html(
+                        \'<span class="eta-label">✓ Complete:</span> \' +
+                        \'<span class="eta-time">\' + successCount + \' Success, \' + errorCount + \' Failed</span>\'
+                    );
+                    
+                    // Unlock UI
+                    SNNPublisher.unlockUI();
+                    
+                    // Change button text
+                    $("#snn-publish-btn").html("🚀 Publish Again");
+                    
+                    // Auto-clear form on complete success
+                    if (errorCount === 0) {
+                        setTimeout(function() {
+                            SNNPublisher.clearForm();
+                            $("#snn-process-queue").slideUp(400, function() {
+                                $(this).find(".queue-items").empty();
+                            });
+                        }, 3000);
+                    }
+                },
+                
+                // Start processing
+                start: function() {
+                    this.processNext();
+                }
+            };
+
+            // =================================================================
+            // PUBLISHER CONTROLLER
+            // =================================================================
+            var SNNPublisher = {
+                navigationGuardActive: false,
+                
+                init: function() {
+                    this.bindEvents();
+                    this.updateCharCount();
+                },
+                
+                bindEvents: function() {
+                    $("#snn-post-text").on("input", this.updateCharCount);
+                    $("#snn-select-media").on("click", this.selectMedia);
+                    $("#snn-remove-media").on("click", this.removeMedia);
+                    $("#snn-publish-btn").on("click", this.publish);
+                },
+                
+                updateCharCount: function() {
+                    var text = $("#snn-post-text").val();
+                    var count = text.length;
+                    var maxLength = $("#snn-post-text").attr("maxlength");
+                    $(".char-count").text(count + " / " + maxLength + " characters");
+                },
+                
+                selectMedia: function(e) {
+                    e.preventDefault();
+                    
+                    if (typeof wp === "undefined" || typeof wp.media === "undefined") {
+                        alert("WordPress media library not loaded. Please refresh the page.");
+                        return;
+                    }
+                    
+                    if (window.snnMediaFrame) {
+                        window.snnMediaFrame.open();
+                        return;
+                    }
+                    
+                    window.snnMediaFrame = wp.media({
+                        title: "Select or Upload Media",
+                        button: { text: "Use this media" },
+                        multiple: false,
+                        library: { type: ["image", "video"] }
+                    });
+                    
+                    window.snnMediaFrame.on("select", function() {
+                        var attachment = window.snnMediaFrame.state().get("selection").first().toJSON();
+                        
+                        $("#snn-media-id").val(attachment.id);
+                        $("#snn-media-url").val(attachment.url);
+                        $("#snn-media-type").val(attachment.type);
+                        
+                        var preview = "";
+                        if (attachment.type === "image") {
+                            preview = "<img src=\"" + attachment.url + "\" alt=\"Preview\">";
+                        } else if (attachment.type === "video") {
+                            preview = "<video width=\"100%\" controls><source src=\"" + attachment.url + "\" type=\"" + attachment.mime + "\"></video>";
+                        }
+                        preview += "<p><strong>File:</strong> " + (attachment.filename || "N/A") + "</p>";
+                        
+                        var fileSize = attachment.filesizeInBytes || attachment.filesize || 0;
+                        preview += "<p><strong>Type:</strong> " + (attachment.mime || "N/A") + " | <strong>Size:</strong> " + (fileSize / 1024 / 1024).toFixed(2) + " MB</p>";
+                        
+                        $("#snn-media-preview").html(preview).slideDown();
+                        $("#snn-remove-media").show();
+                    });
+                    
+                    window.snnMediaFrame.open();
+                },
+                
+                removeMedia: function(e) {
+                    e.preventDefault();
+                    
+                    $("#snn-media-preview").slideUp(function() {
+                        $(this).html("");
+                    });
+                    $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
+                    $("#snn-remove-media").hide();
+                },
+                
+                publish: function() {
+                    var text = $("#snn-post-text").val().trim();
+                    var mediaUrl = $("#snn-media-url").val();
+                    var mediaType = $("#snn-media-type").val();
+                    var platforms = [];
+                    
+                    $("input[name=\"platforms[]\"]:checked").each(function() {
+                        platforms.push($(this).val());
+                    });
+                    
+                    // Validation
+                    if (!text && !mediaUrl) {
+                        alert("⚠️ Please add some text or media before publishing.");
+                        return;
+                    }
+                    
+                    if (platforms.length === 0) {
+                        alert("⚠️ Please select at least one platform.");
+                        return;
+                    }
+                    
+                    // Lock UI
+                    SNNPublisher.lockUI();
+                    
+                    // Activate navigation guard
+                    SNNPublisher.activateNavigationGuard();
+                    
+                    // Initialize and start queue
+                    QueueManager.init(platforms, {
+                        text: text,
+                        mediaUrl: mediaUrl,
+                        mediaType: mediaType
+                    });
+                    
+                    QueueManager.start();
+                },
+                
+                lockUI: function() {
+                    $("#snn-post-text, input[name=\'platforms[]\'], #snn-select-media").prop("disabled", true);
+                    $("#snn-publish-btn").prop("disabled", true).html(\'<span class="dashicons dashicons-update dashicons-spin"></span> Publishing...\');
+                },
+                
+                unlockUI: function() {
+                    $("#snn-post-text, input[name=\'platforms[]\'], #snn-select-media").prop("disabled", false);
+                    $("#snn-publish-btn").prop("disabled", false);
+                    this.deactivateNavigationGuard();
+                },
+                
+                activateNavigationGuard: function() {
+                    this.navigationGuardActive = true;
+                    window.onbeforeunload = function() {
+                        if (SNNPublisher.navigationGuardActive) {
+                            return "⚠️ Publishing is in progress. Are you sure you want to leave?";
+                        }
+                    };
+                },
+                
+                deactivateNavigationGuard: function() {
+                    this.navigationGuardActive = false;
+                    window.onbeforeunload = null;
+                },
+                
+                clearForm: function() {
+                    $("#snn-post-text").val("");
+                    $("#snn-media-preview").slideUp(function() {
+                        $(this).html("");
+                    });
+                    $("#snn-media-id, #snn-media-url, #snn-media-type").val("");
+                    $("#snn-remove-media").hide();
+                    $("input[name=\'platforms[]\']").prop("checked", false);
+                    this.updateCharCount();
+                }
+            };
+
+            // Initialize
+            SNNPublisher.init();
         });
         ';
     }
