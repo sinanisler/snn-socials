@@ -543,34 +543,35 @@ class SNN_Socials {
                 $debug_log[] = 'Media uploaded OK. ID: ' . $media_id;
             }
 
-            // Create tweet using v1.1 API (more compatible with OAuth 1.0a)
-            $debug_log[] = '--- CREATING TWEET ---';
+            // Create tweet using v2 API (required for Free tier)
+            $debug_log[] = '--- CREATING TWEET (v2 API) ---';
 
-            // v1.1 uses 'status' instead of 'text'
-            $tweet_params = array('status' => $text);
+            // v2 uses JSON payload with 'text' field
+            $tweet_data = array('text' => $text);
             if ($media_id) {
-                $tweet_params['media_ids'] = $media_id;
+                $tweet_data['media'] = array('media_ids' => array($media_id));
                 $debug_log[] = 'Tweet with media. ID: ' . $media_id;
             } else {
                 $debug_log[] = 'Tweet text only';
             }
-            $debug_log[] = 'Tweet params: ' . json_encode($tweet_params);
+            $debug_log[] = 'Tweet data (v2 JSON): ' . json_encode($tweet_data);
 
-            $response = $this->make_x_request_v1(
+            // Use v2 endpoint with OAuth 1.0a (Free tier supports this)
+            $response = $this->make_x_request_v2(
                 'POST',
-                'https://api.x.com/1.1/statuses/update.json',
-                $tweet_params,
+                'https://api.x.com/2/tweets',
+                $tweet_data,
                 $settings,
                 $debug_log
             );
 
             $debug_log[] = 'API Response: ' . json_encode($response);
 
-            if (isset($response['id_str'])) {
-                $debug_log[] = 'SUCCESS! Tweet ID: ' . $response['id_str'];
+            if (isset($response['data']['id'])) {
+                $debug_log[] = 'SUCCESS! Tweet ID: ' . $response['data']['id'];
                 return array(
                     'success' => true,
-                    'message' => 'Published to X successfully! Tweet ID: ' . $response['id_str'] . ' | Debug: ' . implode(' | ', $debug_log)
+                    'message' => 'Published to X successfully! Tweet ID: ' . $response['data']['id']
                 );
             }
 
@@ -675,6 +676,69 @@ class SNN_Socials {
         return $media_id;
     }
     
+    /**
+     * Make X API v2 request (with JSON payload - for /2/tweets endpoint)
+     */
+    private function make_x_request_v2($method, $url, $data, $settings, &$debug_log = array()) {
+        $debug_log[] = '[X API v2 REQUEST START]';
+        $debug_log[] = 'Method: ' . $method;
+        $debug_log[] = 'URL: ' . $url;
+        $debug_log[] = 'Data: ' . json_encode($data);
+
+        // For v2 API, OAuth signature is calculated WITHOUT the JSON body
+        // Only the URL and OAuth params are signed
+        $oauth_params = $this->generate_x_oauth_params($method, $url, array(), $settings);
+        $auth_header = 'OAuth ' . $this->build_oauth_header($oauth_params);
+
+        $debug_log[] = 'OAuth nonce: ' . $oauth_params['oauth_nonce'];
+        $debug_log[] = 'OAuth timestamp: ' . $oauth_params['oauth_timestamp'];
+        $debug_log[] = 'OAuth signature (first 20): ' . substr($oauth_params['oauth_signature'], 0, 20) . '...';
+        $debug_log[] = 'Full Auth header (first 100): ' . substr($auth_header, 0, 100) . '...';
+
+        $args = array(
+            'method' => $method,
+            'headers' => array(
+                'Authorization' => $auth_header,
+                'Content-Type' => 'application/json'
+            ),
+            'timeout' => 30
+        );
+
+        if ($method === 'POST' && !empty($data)) {
+            $args['body'] = json_encode($data);
+            $debug_log[] = 'POST JSON body: ' . $args['body'];
+        }
+
+        $debug_log[] = 'Sending v2 request...';
+        $response = wp_remote_request($url, $args);
+
+        if (is_wp_error($response)) {
+            $debug_log[] = 'ERROR wp_remote_request: ' . $response->get_error_message();
+            error_log('SNN Socials X API v2: ' . implode(' | ', $debug_log));
+            throw new Exception($response->get_error_message());
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        $response_headers = wp_remote_retrieve_headers($response);
+
+        $debug_log[] = 'HTTP Status: ' . $status_code;
+        $debug_log[] = 'Response body: ' . $response_body;
+        $debug_log[] = 'Response headers: ' . print_r($response_headers, true);
+
+        $decoded = json_decode($response_body, true);
+
+        if ($status_code >= 400) {
+            $debug_log[] = 'ERROR HTTP ' . $status_code;
+            error_log('SNN Socials X API v2 ERROR: ' . implode(' | ', $debug_log));
+        } else {
+            $debug_log[] = 'Request completed with status ' . $status_code;
+            error_log('SNN Socials X API v2: ' . implode(' | ', $debug_log));
+        }
+
+        return $decoded;
+    }
+
     /**
      * Make X API v1.1 request (with URL-encoded params - for statuses/update endpoint)
      */
