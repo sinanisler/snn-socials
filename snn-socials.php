@@ -595,6 +595,7 @@ class SNN_Socials {
     
     /**
      * Upload media to X (with detailed debug logging)
+     * Uses chunked upload for videos and large files
      */
     private function upload_media_to_x($media_url, $settings) {
         $debug = array();
@@ -613,7 +614,21 @@ class SNN_Socials {
         $file_size = filesize($media_file);
         $debug[] = 'File size: ' . $file_size . ' bytes (' . round($file_size / 1024 / 1024, 2) . ' MB)';
 
-        // Upload to X (using v1.1 endpoint)
+        // Determine media type
+        $mime_type = mime_content_type($media_file);
+        $is_video = strpos($mime_type, 'video') !== false;
+        $debug[] = 'MIME type: ' . $mime_type . ' | Is video: ' . ($is_video ? 'YES' : 'NO');
+
+        // Use chunked upload for videos or files larger than 5MB
+        if ($is_video || $file_size > 5242880) {
+            $debug[] = 'Using CHUNKED upload (file is video or > 5MB)';
+            $result = $this->upload_media_to_x_chunked($media_file, $file_size, $mime_type, $settings, $debug);
+            @unlink($media_file);
+            return $result;
+        }
+
+        // Simple upload for small images
+        $debug[] = 'Using SIMPLE upload';
         $boundary = wp_generate_password(24, false);
         $body = '';
 
@@ -672,6 +687,204 @@ class SNN_Socials {
 
         $debug[] = 'SUCCESS! Media ID: ' . $media_id;
         error_log('SNN Socials X Media Upload: ' . implode(' | ', $debug));
+
+        return $media_id;
+    }
+
+    /**
+     * Upload media to X using chunked upload (INIT -> APPEND -> FINALIZE)
+     * Required for videos and files larger than 5MB
+     */
+    private function upload_media_to_x_chunked($media_file, $file_size, $mime_type, $settings, &$debug) {
+        $debug[] = '[CHUNKED UPLOAD START]';
+
+        // Map MIME type to X media category
+        $media_category = 'tweet_video'; // Default for videos
+        if (strpos($mime_type, 'image') !== false) {
+            $media_category = 'tweet_image';
+        }
+        $debug[] = 'Media category: ' . $media_category;
+
+        // STEP 1: INIT
+        $debug[] = '--- STEP 1: INIT ---';
+        $init_params = array(
+            'command' => 'INIT',
+            'total_bytes' => $file_size,
+            'media_type' => $mime_type,
+            'media_category' => $media_category
+        );
+
+        $init_oauth = $this->generate_x_oauth_params('POST', 'https://upload.x.com/1.1/media/upload.json', $init_params, $settings);
+        $init_auth_header = 'OAuth ' . $this->build_oauth_header($init_oauth);
+
+        $init_response = wp_remote_post('https://upload.x.com/1.1/media/upload.json', array(
+            'headers' => array(
+                'Authorization' => $init_auth_header,
+                'Content-Type' => 'application/x-www-form-urlencoded'
+            ),
+            'body' => http_build_query($init_params),
+            'timeout' => 60
+        ));
+
+        if (is_wp_error($init_response)) {
+            $debug[] = 'INIT ERROR: ' . $init_response->get_error_message();
+            error_log('SNN Socials X Chunked Upload: ' . implode(' | ', $debug));
+            return array('error' => 'INIT failed: ' . $init_response->get_error_message(), 'debug' => implode(' | ', $debug));
+        }
+
+        $init_body = json_decode(wp_remote_retrieve_body($init_response), true);
+        $media_id = $init_body['media_id_string'] ?? null;
+
+        if (!$media_id) {
+            $debug[] = 'INIT ERROR: No media_id returned';
+            $debug[] = 'INIT Response: ' . wp_remote_retrieve_body($init_response);
+            error_log('SNN Socials X Chunked Upload: ' . implode(' | ', $debug));
+            return array('error' => 'INIT failed: No media ID', 'debug' => implode(' | ', $debug));
+        }
+
+        $debug[] = 'INIT SUCCESS. Media ID: ' . $media_id;
+
+        // STEP 2: APPEND (upload in chunks)
+        $debug[] = '--- STEP 2: APPEND ---';
+        $chunk_size = 5 * 1024 * 1024; // 5MB chunks
+        $file_handle = fopen($media_file, 'rb');
+        $segment_index = 0;
+
+        while (!feof($file_handle)) {
+            $chunk_data = fread($file_handle, $chunk_size);
+            $debug[] = 'Uploading segment ' . $segment_index . ' (' . strlen($chunk_data) . ' bytes)';
+
+            // Create multipart form data for this chunk
+            $boundary = wp_generate_password(24, false);
+            $body = '';
+            $body .= "--{$boundary}\r\n";
+            $body .= "Content-Disposition: form-data; name=\"command\"\r\n\r\n";
+            $body .= "APPEND\r\n";
+            $body .= "--{$boundary}\r\n";
+            $body .= "Content-Disposition: form-data; name=\"media_id\"\r\n\r\n";
+            $body .= $media_id . "\r\n";
+            $body .= "--{$boundary}\r\n";
+            $body .= "Content-Disposition: form-data; name=\"segment_index\"\r\n\r\n";
+            $body .= $segment_index . "\r\n";
+            $body .= "--{$boundary}\r\n";
+            $body .= "Content-Disposition: form-data; name=\"media\"; filename=\"chunk.mp4\"\r\n";
+            $body .= "Content-Type: application/octet-stream\r\n\r\n";
+            $body .= $chunk_data . "\r\n";
+            $body .= "--{$boundary}--\r\n";
+
+            // APPEND doesn't need OAuth params in the signature (they're in multipart body)
+            $append_oauth = $this->generate_x_oauth_params('POST', 'https://upload.x.com/1.1/media/upload.json', array(), $settings);
+            $append_auth_header = 'OAuth ' . $this->build_oauth_header($append_oauth);
+
+            $append_response = wp_remote_post('https://upload.x.com/1.1/media/upload.json', array(
+                'headers' => array(
+                    'Authorization' => $append_auth_header,
+                    'Content-Type' => 'multipart/form-data; boundary=' . $boundary
+                ),
+                'body' => $body,
+                'timeout' => 120
+            ));
+
+            if (is_wp_error($append_response)) {
+                fclose($file_handle);
+                $debug[] = 'APPEND ERROR (segment ' . $segment_index . '): ' . $append_response->get_error_message();
+                error_log('SNN Socials X Chunked Upload: ' . implode(' | ', $debug));
+                return array('error' => 'APPEND failed: ' . $append_response->get_error_message(), 'debug' => implode(' | ', $debug));
+            }
+
+            $append_status = wp_remote_retrieve_response_code($append_response);
+            if ($append_status !== 200 && $append_status !== 204) {
+                fclose($file_handle);
+                $debug[] = 'APPEND ERROR: HTTP ' . $append_status;
+                $debug[] = 'Response: ' . wp_remote_retrieve_body($append_response);
+                error_log('SNN Socials X Chunked Upload: ' . implode(' | ', $debug));
+                return array('error' => 'APPEND failed: HTTP ' . $append_status, 'debug' => implode(' | ', $debug));
+            }
+
+            $debug[] = 'Segment ' . $segment_index . ' uploaded successfully';
+            $segment_index++;
+        }
+
+        fclose($file_handle);
+        $debug[] = 'All ' . $segment_index . ' segments uploaded';
+
+        // STEP 3: FINALIZE
+        $debug[] = '--- STEP 3: FINALIZE ---';
+        $finalize_params = array(
+            'command' => 'FINALIZE',
+            'media_id' => $media_id
+        );
+
+        $finalize_oauth = $this->generate_x_oauth_params('POST', 'https://upload.x.com/1.1/media/upload.json', $finalize_params, $settings);
+        $finalize_auth_header = 'OAuth ' . $this->build_oauth_header($finalize_oauth);
+
+        $finalize_response = wp_remote_post('https://upload.x.com/1.1/media/upload.json', array(
+            'headers' => array(
+                'Authorization' => $finalize_auth_header,
+                'Content-Type' => 'application/x-www-form-urlencoded'
+            ),
+            'body' => http_build_query($finalize_params),
+            'timeout' => 60
+        ));
+
+        if (is_wp_error($finalize_response)) {
+            $debug[] = 'FINALIZE ERROR: ' . $finalize_response->get_error_message();
+            error_log('SNN Socials X Chunked Upload: ' . implode(' | ', $debug));
+            return array('error' => 'FINALIZE failed: ' . $finalize_response->get_error_message(), 'debug' => implode(' | ', $debug));
+        }
+
+        $finalize_body = json_decode(wp_remote_retrieve_body($finalize_response), true);
+        $debug[] = 'FINALIZE Response: ' . wp_remote_retrieve_body($finalize_response);
+
+        // Check for processing info (videos need processing time)
+        if (isset($finalize_body['processing_info'])) {
+            $debug[] = 'Video is processing...';
+            $max_wait = 60; // Max 60 seconds wait
+            $wait_time = 0;
+
+            while (isset($finalize_body['processing_info']['state']) &&
+                   $finalize_body['processing_info']['state'] !== 'succeeded' &&
+                   $wait_time < $max_wait) {
+
+                $state = $finalize_body['processing_info']['state'];
+                $check_after = $finalize_body['processing_info']['check_after_secs'] ?? 5;
+
+                $debug[] = 'Processing state: ' . $state . ' | Waiting ' . $check_after . ' seconds...';
+                sleep($check_after);
+                $wait_time += $check_after;
+
+                // STATUS check
+                $status_params = array(
+                    'command' => 'STATUS',
+                    'media_id' => $media_id
+                );
+
+                $status_oauth = $this->generate_x_oauth_params('GET', 'https://upload.x.com/1.1/media/upload.json', $status_params, $settings);
+                $status_auth_header = 'OAuth ' . $this->build_oauth_header($status_oauth);
+                $status_url = 'https://upload.x.com/1.1/media/upload.json?' . http_build_query($status_params);
+
+                $status_response = wp_remote_get($status_url, array(
+                    'headers' => array('Authorization' => $status_auth_header),
+                    'timeout' => 30
+                ));
+
+                if (!is_wp_error($status_response)) {
+                    $finalize_body = json_decode(wp_remote_retrieve_body($status_response), true);
+                } else {
+                    break;
+                }
+            }
+
+            if (isset($finalize_body['processing_info']['state']) &&
+                $finalize_body['processing_info']['state'] === 'failed') {
+                $debug[] = 'Video processing FAILED';
+                error_log('SNN Socials X Chunked Upload: ' . implode(' | ', $debug));
+                return array('error' => 'Video processing failed', 'debug' => implode(' | ', $debug));
+            }
+        }
+
+        $debug[] = 'CHUNKED UPLOAD SUCCESS! Media ID: ' . $media_id;
+        error_log('SNN Socials X Chunked Upload: ' . implode(' | ', $debug));
 
         return $media_id;
     }
