@@ -484,126 +484,253 @@ class SNN_Socials {
     
     /**
      * Publish to X (Twitter)
-     * @return array Standardized response: ['success' => bool, 'message' => string]
+     * @return array Standardized response: ['success' => bool, 'message' => string, 'debug' => string]
      */
     private function publish_to_x($text, $media_url, $media_type) {
         $settings = get_option($this->option_name, array());
-        
+
+        $debug_log = array();
+        $debug_log[] = '=== X (TWITTER) PUBLISH DEBUG LOG ===';
+        $debug_log[] = 'Time: ' . date('Y-m-d H:i:s');
+        $debug_log[] = 'Text length: ' . strlen($text);
+        $debug_log[] = 'Has media: ' . (!empty($media_url) ? 'YES' : 'NO');
+
         if (empty($settings['x_api_key']) || empty($settings['x_access_token'])) {
-            return array('success' => false, 'message' => 'X API credentials not configured');
+            $debug_log[] = 'ERROR: Missing credentials';
+            $debug_log[] = 'Has API Key: ' . (!empty($settings['x_api_key']) ? 'YES' : 'NO');
+            $debug_log[] = 'Has API Secret: ' . (!empty($settings['x_api_secret']) ? 'YES' : 'NO');
+            $debug_log[] = 'Has Access Token: ' . (!empty($settings['x_access_token']) ? 'YES' : 'NO');
+            $debug_log[] = 'Has Access Secret: ' . (!empty($settings['x_access_secret']) ? 'YES' : 'NO');
+            return array(
+                'success' => false,
+                'message' => 'X API credentials not configured. Debug: ' . implode(' | ', $debug_log)
+            );
         }
-        
+
+        $debug_log[] = 'Credentials: ALL PRESENT';
+        $debug_log[] = 'API Key (first 10): ' . substr($settings['x_api_key'], 0, 10) . '...';
+        $debug_log[] = 'Access Token (first 10): ' . substr($settings['x_access_token'], 0, 10) . '...';
+
         try {
             $media_id = null;
-            
+
             // Upload media if provided
             if (!empty($media_url)) {
-                $media_id = $this->upload_media_to_x($media_url, $settings);
-                if (!$media_id) {
-                    return array('success' => false, 'message' => 'Failed to upload media to X');
+                $debug_log[] = '--- UPLOADING MEDIA ---';
+                $debug_log[] = 'Media URL: ' . $media_url;
+                $debug_log[] = 'Media Type: ' . $media_type;
+
+                $upload_result = $this->upload_media_to_x($media_url, $settings);
+
+                if (is_array($upload_result)) {
+                    $debug_log[] = 'Upload returned array (ERROR): ' . json_encode($upload_result);
+                    return array(
+                        'success' => false,
+                        'message' => 'Media upload failed. Debug: ' . implode(' | ', $debug_log)
+                    );
                 }
+
+                $media_id = $upload_result;
+
+                if (!$media_id) {
+                    $debug_log[] = 'ERROR: Upload returned no media ID';
+                    return array(
+                        'success' => false,
+                        'message' => 'Failed to upload media to X (no media ID). Debug: ' . implode(' | ', $debug_log)
+                    );
+                }
+
+                $debug_log[] = 'Media uploaded OK. ID: ' . $media_id;
             }
-            
+
             // Create tweet
+            $debug_log[] = '--- CREATING TWEET ---';
             $tweet_data = array('text' => $text);
             if ($media_id) {
                 $tweet_data['media'] = array('media_ids' => array($media_id));
+                $debug_log[] = 'Tweet with media. ID: ' . $media_id;
+            } else {
+                $debug_log[] = 'Tweet text only';
             }
-            
+            $debug_log[] = 'Tweet payload: ' . json_encode($tweet_data);
+
             $response = $this->make_x_request(
                 'POST',
                 'https://api.x.com/2/tweets',
                 $tweet_data,
-                $settings
+                $settings,
+                $debug_log
             );
-            
+
+            $debug_log[] = 'API Response: ' . json_encode($response);
+
             if (isset($response['data']['id'])) {
+                $debug_log[] = 'SUCCESS! Tweet ID: ' . $response['data']['id'];
                 return array(
                     'success' => true,
-                    'message' => 'Published to X successfully'
+                    'message' => 'Published to X successfully! Debug: ' . implode(' | ', $debug_log)
                 );
             }
-            
+
+            $debug_log[] = 'ERROR: No tweet ID in response';
+            $debug_log[] = 'Full response dump: ' . print_r($response, true);
+
             return array(
                 'success' => false,
-                'message' => 'Failed to publish to X: ' . json_encode($response)
+                'message' => 'Failed to publish to X: ' . json_encode($response) . ' | Debug: ' . implode(' | ', $debug_log)
             );
-            
+
         } catch (Exception $e) {
-            return array('success' => false, 'message' => 'X Error: ' . $e->getMessage());
+            $debug_log[] = 'EXCEPTION: ' . $e->getMessage();
+            $debug_log[] = 'Stack: ' . $e->getTraceAsString();
+            return array(
+                'success' => false,
+                'message' => 'X Error: ' . $e->getMessage() . ' | Debug: ' . implode(' | ', $debug_log)
+            );
         }
     }
     
     /**
-     * Upload media to X
+     * Upload media to X (with detailed debug logging)
      */
     private function upload_media_to_x($media_url, $settings) {
+        $debug = array();
+        $debug[] = '[MEDIA UPLOAD START]';
+        $debug[] = 'Media URL: ' . $media_url;
+
         // Download media file
         $media_file = download_url($media_url);
         if (is_wp_error($media_file)) {
-            return false;
+            $debug[] = 'ERROR downloading media: ' . $media_file->get_error_message();
+            error_log('SNN Socials X Media Upload: ' . implode(' | ', $debug));
+            return array('error' => 'Download failed: ' . $media_file->get_error_message(), 'debug' => implode(' | ', $debug));
         }
-        
+
+        $debug[] = 'Downloaded to: ' . $media_file;
+        $file_size = filesize($media_file);
+        $debug[] = 'File size: ' . $file_size . ' bytes (' . round($file_size / 1024 / 1024, 2) . ' MB)';
+
         // Upload to X (using v1.1 endpoint)
         $boundary = wp_generate_password(24, false);
         $body = '';
-        
+
         $file_contents = file_get_contents($media_file);
         $file_name = basename($media_url);
-        
+
         $body .= "--{$boundary}\r\n";
         $body .= "Content-Disposition: form-data; name=\"media\"; filename=\"{$file_name}\"\r\n";
         $body .= "Content-Type: application/octet-stream\r\n\r\n";
         $body .= $file_contents . "\r\n";
         $body .= "--{$boundary}--\r\n";
-        
+
+        $debug[] = 'Multipart body size: ' . strlen($body) . ' bytes';
+
         $oauth_params = $this->generate_x_oauth_params('POST', 'https://upload.x.com/1.1/media/upload.json', array(), $settings);
-        
+        $auth_header = 'OAuth ' . $this->build_oauth_header($oauth_params);
+        $debug[] = 'OAuth header (first 50): ' . substr($auth_header, 0, 50) . '...';
+
         $response = wp_remote_post('https://upload.x.com/1.1/media/upload.json', array(
             'headers' => array(
-                'Authorization' => 'OAuth ' . $this->build_oauth_header($oauth_params),
+                'Authorization' => $auth_header,
                 'Content-Type' => 'multipart/form-data; boundary=' . $boundary
             ),
             'body' => $body,
             'timeout' => 60
         ));
-        
+
         @unlink($media_file);
-        
+
         if (is_wp_error($response)) {
-            return false;
+            $debug[] = 'ERROR wp_remote_post: ' . $response->get_error_message();
+            error_log('SNN Socials X Media Upload: ' . implode(' | ', $debug));
+            return array('error' => 'Upload request failed: ' . $response->get_error_message(), 'debug' => implode(' | ', $debug));
         }
-        
-        $body = json_decode(wp_remote_retrieve_body($response), true);
-        return $body['media_id_string'] ?? false;
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        $debug[] = 'HTTP Status: ' . $status_code;
+        $debug[] = 'Response body: ' . $response_body;
+
+        $body_decoded = json_decode($response_body, true);
+
+        if ($status_code !== 200) {
+            $debug[] = 'ERROR: HTTP ' . $status_code;
+            error_log('SNN Socials X Media Upload: ' . implode(' | ', $debug));
+            return array('error' => 'HTTP ' . $status_code . ': ' . $response_body, 'debug' => implode(' | ', $debug));
+        }
+
+        $media_id = $body_decoded['media_id_string'] ?? false;
+
+        if (!$media_id) {
+            $debug[] = 'ERROR: No media_id_string in response';
+            error_log('SNN Socials X Media Upload: ' . implode(' | ', $debug));
+            return array('error' => 'No media ID returned', 'debug' => implode(' | ', $debug));
+        }
+
+        $debug[] = 'SUCCESS! Media ID: ' . $media_id;
+        error_log('SNN Socials X Media Upload: ' . implode(' | ', $debug));
+
+        return $media_id;
     }
     
     /**
-     * Make X API request
+     * Make X API request (with detailed debug logging)
      */
-    private function make_x_request($method, $url, $data, $settings) {
+    private function make_x_request($method, $url, $data, $settings, &$debug_log = array()) {
+        $debug_log[] = '[X API REQUEST START]';
+        $debug_log[] = 'Method: ' . $method;
+        $debug_log[] = 'URL: ' . $url;
+
         $oauth_params = $this->generate_x_oauth_params($method, $url, array(), $settings);
-        
+        $auth_header = 'OAuth ' . $this->build_oauth_header($oauth_params);
+
+        $debug_log[] = 'OAuth nonce: ' . $oauth_params['oauth_nonce'];
+        $debug_log[] = 'OAuth timestamp: ' . $oauth_params['oauth_timestamp'];
+        $debug_log[] = 'OAuth signature (first 20): ' . substr($oauth_params['oauth_signature'], 0, 20) . '...';
+        $debug_log[] = 'Full Auth header (first 100): ' . substr($auth_header, 0, 100) . '...';
+
         $args = array(
             'method' => $method,
             'headers' => array(
-                'Authorization' => 'OAuth ' . $this->build_oauth_header($oauth_params),
+                'Authorization' => $auth_header,
                 'Content-Type' => 'application/json'
             ),
             'timeout' => 30
         );
-        
+
         if ($method === 'POST' && !empty($data)) {
             $args['body'] = json_encode($data);
+            $debug_log[] = 'POST body: ' . $args['body'];
         }
-        
+
+        $debug_log[] = 'Sending request...';
         $response = wp_remote_request($url, $args);
-        
+
         if (is_wp_error($response)) {
+            $debug_log[] = 'ERROR wp_remote_request: ' . $response->get_error_message();
+            error_log('SNN Socials X API: ' . implode(' | ', $debug_log));
             throw new Exception($response->get_error_message());
         }
-        
-        return json_decode(wp_remote_retrieve_body($response), true);
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        $response_headers = wp_remote_retrieve_headers($response);
+
+        $debug_log[] = 'HTTP Status: ' . $status_code;
+        $debug_log[] = 'Response body: ' . $response_body;
+        $debug_log[] = 'Response headers: ' . print_r($response_headers, true);
+
+        $decoded = json_decode($response_body, true);
+
+        if ($status_code >= 400) {
+            $debug_log[] = 'ERROR HTTP ' . $status_code;
+            error_log('SNN Socials X API ERROR: ' . implode(' | ', $debug_log));
+        } else {
+            $debug_log[] = 'Request completed with status ' . $status_code;
+            error_log('SNN Socials X API: ' . implode(' | ', $debug_log));
+        }
+
+        return $decoded;
     }
     
     /**
