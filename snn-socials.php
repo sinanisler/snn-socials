@@ -1,11 +1,11 @@
 <?php    
 /**
  * Plugin Name: SNN Socials
- * Plugin URI: https://sinanisler.com
+ * Plugin URI: https://github.com/sinanisler/snn-socials
  * Description: Publish images and videos to X (Twitter), LinkedIn, Instagram, and YouTube from your WordPress dashboard
  * Version: 2.0.0
  * Author: sinanisler
- * Author URI: https://sinanisler.com
+ * Author URI: https://github.com/sinanisler
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
